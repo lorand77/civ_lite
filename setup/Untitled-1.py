@@ -6,7 +6,7 @@ screen = pygame.display.set_mode((640, 480))
 pygame.display.set_caption("Hello Pygame")
 
 font = pygame.font.Font(None, 64)
-text = font.render("Hello Pygame!", True, (255, 255, 0))
+text = font.render("Hello World!!", True, (255, 255, 0))
 
 running = True
 while running:
