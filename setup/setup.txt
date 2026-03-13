@@ -1,0 +1,29 @@
+in WSL2 ubuntu:
+
+cd /mnt/c/Users/username/path/to/project
+run the start script to start docker container  
+
+docker exec -ti -u root CONTAINER_NAME bash
+apt update
+apt install -y python3 curl x11-apps git
+
+
+
+in VSC on win11:
+
+attach to running container
+
+open folder /workspace
+
+install python VSC extension
+
+create python env
+
+terminal (user ubuntu):
+pip install pygame
+
+
+install Claude VSC extension
+
+also install in the terminal 
+curl -fsSL https://claude.ai/install.sh | bash
