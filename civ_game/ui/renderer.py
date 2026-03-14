@@ -59,18 +59,6 @@ def render(screen, game, camera, ui_state):
         pygame.draw.polygon(screen, TERRAIN_COLORS[tile.terrain], hex_corners(cx, cy, hs))
         pygame.draw.polygon(screen, COLOR_HEX_BORDER, hex_corners(cx, cy, hs), 1)
 
-    # --- Layer 2: Territory overlay (semi-transparent) ---
-    territory_surf = pygame.Surface((SCREEN_W, SCREEN_H - HUD_HEIGHT), pygame.SRCALPHA)
-    for (q, r), tile in game.tiles.items():
-        if tile.owner is None:
-            continue
-        cx, cy = hex_to_pixel(q, r, ox, oy, hs)
-        if not _on_screen(cx, cy, hs):
-            continue
-        base = PLAYER_COLORS[tile.owner]
-        pygame.draw.polygon(territory_surf, (*base, 45), hex_corners(cx, cy, hs))
-    screen.blit(territory_surf, (0, 0))
-
     # --- Layer 2b: Territory border lines ---
     for (q, r), tile in game.tiles.items():
         if tile.owner is None:

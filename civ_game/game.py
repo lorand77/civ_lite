@@ -1,7 +1,7 @@
 import numpy as np
 from civ_game.map.hex_grid import HEX_SIZE, hex_to_pixel, hexes_in_range
 from civ_game.map.generator import generate_map
-from civ_game.map.terrain import TERRAIN_PASSABLE
+from civ_game.map.terrain import TERRAIN_PASSABLE, TERRAIN_YIELDS, RESOURCES
 from civ_game.entities.civilization import Civilization
 from civ_game.entities.unit import Unit
 from civ_game.entities.city import City, auto_assign_worked_tiles
@@ -269,7 +269,6 @@ class Game:
     def _expand_border(self, civ):
         """Claim one unclaimed tile adjacent to this civ's territory (best yield first)."""
         from civ_game.map.hex_grid import hex_neighbors
-        from civ_game.map.terrain import TERRAIN_YIELDS
 
         candidates = set()
         for (q, r), tile in self.tiles.items():
@@ -284,8 +283,13 @@ class Game:
             return
 
         def score(pos):
-            y = TERRAIN_YIELDS[self.tiles[pos].terrain]
-            return y["food"] + y["prod"] + y["gold"]
+            t = self.tiles[pos]
+            y = TERRAIN_YIELDS[t.terrain]
+            total = y["food"] + y["prod"] + y["gold"]
+            if t.resource:
+                r = RESOURCES[t.resource]["yield_bonus"]
+                total += r.get("food", 0) + r.get("prod", 0) + r.get("gold", 0)
+            return total
 
         best = max(candidates, key=score)
         self.tiles[best].owner = civ.player_index
