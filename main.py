@@ -55,7 +55,7 @@ def main():
     pygame.display.set_caption("CivPy")
     clock = pygame.time.Clock()
 
-    game = Game(num_players=4, map_cols=32, map_rows=20, seed=42)
+    game = Game(num_players=4, map_cols=32, map_rows=20, seed=None)
     ui_state = UIState()
 
     running = True

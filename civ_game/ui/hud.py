@@ -41,8 +41,12 @@ class UIState:
         self.selected_unit = None
 
 
+_font_cache: dict[int, pygame.font.Font] = {}
+
 def _font(size):
-    return pygame.font.SysFont("monospace", size)
+    if size not in _font_cache:
+        _font_cache[size] = pygame.font.Font(None, size)
+    return _font_cache[size]
 
 
 def render_hud(screen, game, ui_state):
