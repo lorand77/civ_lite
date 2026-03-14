@@ -1,6 +1,6 @@
 import math
 
-HEX_SIZE = 36  # center-to-corner, pointy-top
+HEX_SIZE = 72  # center-to-corner, pointy-top
 
 
 def hex_to_pixel(q, r, offset_x=0, offset_y=0, hex_size=HEX_SIZE):

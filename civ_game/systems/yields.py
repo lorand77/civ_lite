@@ -1,0 +1,47 @@
+from civ_game.map.terrain import TERRAIN_YIELDS, RESOURCES
+from civ_game.entities.improvement import IMPROVEMENT_DEFS
+from civ_game.data.buildings import BUILDING_DEFS
+
+
+def compute_city_yields(city, tiles, civ):
+    """Return dict with food/prod/gold/science/culture totals for a city."""
+    totals = {"food": 0, "prod": 0, "gold": 0, "science": 0, "culture": 0}
+
+    for (q, r) in city.worked_tiles:
+        tile = tiles.get((q, r))
+        if not tile:
+            continue
+
+        t = TERRAIN_YIELDS[tile.terrain]
+        totals["food"] += t["food"]
+        totals["prod"] += t["prod"]
+        totals["gold"] += t["gold"]
+
+        # Resource bonus (visible if no tech required, or civ has the tech)
+        if tile.resource:
+            res = RESOURCES[tile.resource]
+            req = res.get("requires_tech")
+            if req is None or req in civ.techs_researched:
+                for k, v in res["yield_bonus"].items():
+                    totals[k] = totals.get(k, 0) + v
+
+        # Improvement bonus
+        if tile.improvement:
+            imp = IMPROVEMENT_DEFS[tile.improvement]
+            for k, v in imp["yield_bonus"].items():
+                totals[k] = totals.get(k, 0) + v
+
+    # Building bonuses
+    for b_key in city.buildings:
+        b = BUILDING_DEFS[b_key]
+        eff = b["effects"]
+        totals["food"]    += eff.get("food_per_turn", 0)
+        totals["prod"]    += eff.get("prod_per_turn", 0)
+        totals["gold"]    += eff.get("gold_per_turn", 0)
+        totals["science"] += eff.get("science_per_turn", 0)
+        totals["culture"] += eff.get("culture_per_turn", 0)
+
+    # Base science per city
+    totals["science"] += 1
+
+    return totals
