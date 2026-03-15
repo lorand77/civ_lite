@@ -50,7 +50,7 @@ def _select_unit(unit, game, ui_state):
         ui_state.reachable_tiles = get_reachable_tiles(unit, game.tiles)
         ui_state.attackable_tiles = get_attackable_tiles(unit, game.tiles)
     else:
-        ui_state.reachable_tiles = set()
+        ui_state.reachable_tiles = {}
         ui_state.attackable_tiles = set()
 
 
@@ -99,7 +99,7 @@ def _handle_left_click(pos, game, ui_state):
             ui_state.reachable_tiles = get_reachable_tiles(selected_unit, game.tiles)
             ui_state.attackable_tiles = get_attackable_tiles(selected_unit, game.tiles)
         else:
-            ui_state.reachable_tiles = set()
+            ui_state.reachable_tiles = {}
             ui_state.attackable_tiles = set()
             ui_state.selected_unit = None
         return
@@ -115,7 +115,7 @@ def _handle_left_click(pos, game, ui_state):
         ui_state.selected_city = tile.city
         ui_state.selected_unit = None
         ui_state.selected_tile = None
-        ui_state.reachable_tiles = set()
+        ui_state.reachable_tiles = {}
         ui_state.attackable_tiles = set()
         return
 
@@ -123,7 +123,7 @@ def _handle_left_click(pos, game, ui_state):
     ui_state.selected_tile = tile
     ui_state.selected_unit = None
     ui_state.selected_city = None
-    ui_state.reachable_tiles = set()
+    ui_state.reachable_tiles = {}
     ui_state.attackable_tiles = set()
 
 
@@ -165,17 +165,17 @@ def _handle_key(key, game, ui_state):
 
     elif key == pygame.K_m and unit and unit.unit_type == "worker":
         game.start_improvement(unit, "mine")
-        ui_state.reachable_tiles = set()
+        ui_state.reachable_tiles = {}
         ui_state.attackable_tiles = set()
 
     elif key == pygame.K_a and unit and unit.unit_type == "worker":
         game.start_improvement(unit, "farm")
-        ui_state.reachable_tiles = set()
+        ui_state.reachable_tiles = {}
         ui_state.attackable_tiles = set()
 
     elif key == pygame.K_p and unit and unit.unit_type == "worker":
         game.start_improvement(unit, "pasture")
-        ui_state.reachable_tiles = set()
+        ui_state.reachable_tiles = {}
         ui_state.attackable_tiles = set()
 
     elif key == pygame.K_k and unit and not unit.is_civilian:
@@ -183,7 +183,7 @@ def _handle_key(key, game, ui_state):
         unit.fortified = True
         unit.healing = False
         unit.moves_left = 0
-        ui_state.reachable_tiles = set()
+        ui_state.reachable_tiles = {}
         ui_state.attackable_tiles = set()
 
     elif key == pygame.K_h and unit and not unit.is_civilian:
@@ -194,7 +194,7 @@ def _handle_key(key, game, ui_state):
             unit.fortified = False
             unit.fortify_bonus = 0.0
             unit.moves_left = 0
-            ui_state.reachable_tiles = set()
+            ui_state.reachable_tiles = {}
             ui_state.attackable_tiles = set()
 
 

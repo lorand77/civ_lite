@@ -29,7 +29,7 @@ class UIState:
 
     selected_unit: object = None
     selected_city: object = None
-    reachable_tiles: set = field(default_factory=set)
+    reachable_tiles: dict = field(default_factory=dict)
     attackable_tiles: set = field(default_factory=set)
 
     city_screen_open: bool = False
@@ -50,7 +50,7 @@ class UIState:
         self.selected_tile = None
         self.selected_unit = None
         self.selected_city = None
-        self.reachable_tiles = set()
+        self.reachable_tiles = {}
         self.attackable_tiles = set()
 
 

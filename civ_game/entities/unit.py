@@ -15,7 +15,6 @@ class Unit:
     r: int
     hp: int                 # current HP
     moves_left: int
-    xp: int = 0
     fortified: bool = False
     fortify_bonus: float = 0.0
     healing: bool = False

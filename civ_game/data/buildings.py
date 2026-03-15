@@ -12,10 +12,6 @@ BUILDING_DEFS = {
         "name": "Granary", "prod_cost": 80, "requires_tech": "pottery",
         "effects": {"food_per_turn": 2}, "maintenance": 1,
     },
-    "barracks": {
-        "name": "Barracks", "prod_cost": 80, "requires_tech": "bronze_working",
-        "effects": {"new_unit_xp": 15}, "maintenance": 1,
-    },
     "library": {
         "name": "Library", "prod_cost": 100, "requires_tech": "writing",
         "effects": {"science_per_turn": 2}, "maintenance": 1,

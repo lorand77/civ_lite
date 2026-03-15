@@ -378,8 +378,8 @@ class Game:
             if target_unit.hp <= 0:
                 self.remove_unit(target_unit)
                 target_unit = None
-                if unit_type == "melee":
-                    # Advance after combat
+                if unit_type == "melee" and attacker.hp > 0:
+                    # Advance after combat (only if attacker survived)
                     if target_city and target_city.owner != attacker.owner:
                         self._capture_city(attacker, target_city)
                         msg += " → City captured!"
@@ -504,17 +504,11 @@ class Game:
             if unit.fortified:
                 unit.fortify_bonus = min(0.5, unit.fortify_bonus + 0.25)
 
-        # Advance to next non-eliminated player
-        next_player = (self.current_player + 1) % self.num_players
-        if next_player == 0:
-            self.turn += 1
-        self.current_player = next_player
-
-        # Skip eliminated players (up to full loop)
-        for _ in range(self.num_players - 1):
-            if not self.civs[self.current_player].is_eliminated:
-                break
+        # Advance to next non-eliminated player, incrementing turn on wrap-around
+        for _ in range(self.num_players):
             next_player = (self.current_player + 1) % self.num_players
             if next_player == 0:
                 self.turn += 1
             self.current_player = next_player
+            if not self.civs[self.current_player].is_eliminated:
+                break
