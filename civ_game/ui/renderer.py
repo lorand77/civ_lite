@@ -13,10 +13,12 @@ HUD_HEIGHT = 180
 # For pointy-top hex: edge i (shared with HEX_DIRECTIONS[i]) connects these corner indices
 _EDGE_CORNERS = [(0, 1), (5, 0), (4, 5), (3, 4), (2, 3), (1, 2)]
 
-COLOR_HEX_BORDER  = (0, 0, 0)
-COLOR_SELECTED    = (255, 230, 50)
-COLOR_MOVE_FILL   = (255, 255, 100, 55)
-COLOR_MOVE_BORDER = (255, 255, 100)
+COLOR_HEX_BORDER    = (0, 0, 0)
+COLOR_SELECTED      = (255, 230, 50)
+COLOR_MOVE_FILL     = (255, 255, 100, 55)
+COLOR_MOVE_BORDER   = (255, 255, 100)
+COLOR_ATTACK_FILL   = (255, 80, 80, 55)
+COLOR_ATTACK_BORDER = (255, 80, 80)
 
 PLAYER_COLORS = [
     (220, 50,  50),
@@ -104,16 +106,22 @@ def render(screen, game, camera, ui_state):
         screen.blit(surf, (int(cx) - surf.get_width() // 2 - int(hs * 0.3),
                            int(cy) + int(hs * 0.3)))
 
-    # --- Layer 5: Movement range highlight ---
-    if ui_state.reachable_tiles:
-        move_surf = pygame.Surface((SCREEN_W, SCREEN_H - HUD_HEIGHT), pygame.SRCALPHA)
+    # --- Layer 5: Movement + attack range highlights ---
+    if ui_state.reachable_tiles or ui_state.attackable_tiles:
+        overlay_surf = pygame.Surface((SCREEN_W, SCREEN_H - HUD_HEIGHT), pygame.SRCALPHA)
         for (q, r) in ui_state.reachable_tiles:
             cx, cy = hex_to_pixel(q, r, ox, oy, hs)
             if not _on_screen(cx, cy, hs):
                 continue
-            pygame.draw.polygon(move_surf, COLOR_MOVE_FILL, hex_corners(cx, cy, hs))
-            pygame.draw.polygon(move_surf, (*COLOR_MOVE_BORDER, 200), hex_corners(cx, cy, hs), 2)
-        screen.blit(move_surf, (0, 0))
+            pygame.draw.polygon(overlay_surf, COLOR_MOVE_FILL, hex_corners(cx, cy, hs))
+            pygame.draw.polygon(overlay_surf, (*COLOR_MOVE_BORDER, 200), hex_corners(cx, cy, hs), 2)
+        for (q, r) in ui_state.attackable_tiles:
+            cx, cy = hex_to_pixel(q, r, ox, oy, hs)
+            if not _on_screen(cx, cy, hs):
+                continue
+            pygame.draw.polygon(overlay_surf, COLOR_ATTACK_FILL, hex_corners(cx, cy, hs))
+            pygame.draw.polygon(overlay_surf, (*COLOR_ATTACK_BORDER, 220), hex_corners(cx, cy, hs), 3)
+        screen.blit(overlay_surf, (0, 0))
 
     # --- Layer 6: Cities ---
     for civ in game.civs:
@@ -124,6 +132,9 @@ def render(screen, game, camera, ui_state):
             r_city = max(8, hs // 3)
             pygame.draw.circle(screen, civ.color, (int(cx), int(cy)), r_city)
             pygame.draw.circle(screen, (0, 0, 0), (int(cx), int(cy)), r_city, 2)
+            # Original capital marker: gold ring
+            if city.is_original_capital:
+                pygame.draw.circle(screen, (255, 215, 0), (int(cx), int(cy)), r_city + 3, 2)
             # Name above
             name_surf = _font(24).render(city.name, True, (255, 255, 255))
             screen.blit(name_surf, (int(cx) - name_surf.get_width() // 2,
@@ -132,6 +143,12 @@ def render(screen, game, camera, ui_state):
             pop_surf = _font(24).render(str(city.population), True, (255, 255, 255))
             screen.blit(pop_surf, (int(cx) - pop_surf.get_width() // 2,
                                    int(cy) - pop_surf.get_height() // 2))
+            # HP bar (only when damaged)
+            if city.hp < 50:
+                bar_w = r_city * 2 + 4
+                bx = int(cx) - r_city - 2
+                by = int(cy) + r_city + 3
+                _draw_hp_bar_inline(screen, bx, by, city.hp, 50, bar_w)
 
     # --- Layer 7: Units ---
     for civ in game.civs:
@@ -144,9 +161,12 @@ def render(screen, game, camera, ui_state):
             r_unit = max(7, hs // 4)
             pygame.draw.circle(screen, civ.color, (ux, uy), r_unit)
             pygame.draw.circle(screen, (0, 0, 0), (ux, uy), r_unit, 2)
+            # Fortified ring
+            if unit.fortified:
+                pygame.draw.circle(screen, (200, 200, 255), (ux, uy), r_unit + 2, 2)
             lbl = _font(22).render(unit.label, True, (255, 255, 255))
             screen.blit(lbl, (ux - lbl.get_width() // 2, uy - lbl.get_height() // 2))
-            # Grey out if no moves left
+            # Grey out if no moves left (current player only)
             if unit.moves_left == 0 and unit.owner == game.current_player:
                 dim = pygame.Surface((r_unit * 2, r_unit * 2), pygame.SRCALPHA)
                 pygame.draw.circle(dim, (0, 0, 0, 100), (r_unit, r_unit), r_unit)
@@ -155,6 +175,14 @@ def render(screen, game, camera, ui_state):
             if unit.building_improvement:
                 ind = _font(20).render(f"[{unit.build_turns_left}]", True, (255, 220, 80))
                 screen.blit(ind, (ux + r_unit, uy - r_unit))
+            # HP bar (only when damaged)
+            from civ_game.data.units import UNIT_DEFS as _UD
+            hp_max = _UD[unit.unit_type]["hp_max"]
+            if unit.hp < hp_max:
+                bar_w = r_unit * 2 + 4
+                bx = ux - r_unit - 2
+                by = uy + r_unit + 3
+                _draw_hp_bar_inline(screen, bx, by, unit.hp, hp_max, bar_w)
 
     # --- Layer 8: Selection ring ---
     if selected_qr and selected_qr in game.tiles:
@@ -171,4 +199,48 @@ def render(screen, game, camera, ui_state):
         render_city_screen(screen, ui_state.selected_city,
                            game.civs[ui_state.selected_city.owner], ui_state)
 
+    # --- Layer 11: Combat message ---
+    if ui_state.message_timer > 0:
+        ui_state.message_timer -= 1
+        msg_surf = _font(28).render(ui_state.message, True, (255, 230, 100))
+        mx = SCREEN_W // 2 - msg_surf.get_width() // 2
+        my = (SCREEN_H - HUD_HEIGHT) // 2 - 20
+        bg = pygame.Surface((msg_surf.get_width() + 20, msg_surf.get_height() + 10),
+                             pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 160))
+        screen.blit(bg, (mx - 10, my - 5))
+        screen.blit(msg_surf, (mx, my))
+
+    # --- Layer 12: Win screen ---
+    if game.winner is not None:
+        _render_win_screen(screen, game.winner)
+
     pygame.display.flip()
+
+
+def _draw_hp_bar_inline(screen, x, y, hp, max_hp, width=40):
+    filled = max(0, int(width * hp / max_hp))
+    pygame.draw.rect(screen, (80, 20, 20), (x, y, width, 5))
+    pygame.draw.rect(screen, (220, 60, 60), (x, y, filled, 5))
+    pygame.draw.rect(screen, (140, 140, 140), (x, y, width, 5), 1)
+
+
+def _render_win_screen(screen, winner):
+    from civ_game.game import PLAYER_NAMES, PLAYER_COLORS
+
+    overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 190))
+    screen.blit(overlay, (0, 0))
+
+    cname = PLAYER_NAMES[winner]
+    color = PLAYER_COLORS[winner]
+
+    title = _font(90).render("VICTORY!", True, (255, 215, 0))
+    sub   = _font(44).render(f"{cname} achieves Domination!", True, color)
+    hint  = _font(30).render("Close the window to exit.", True, (180, 180, 180))
+
+    cx = SCREEN_W // 2
+    cy = SCREEN_H // 2
+    screen.blit(title, title.get_rect(center=(cx, cy - 70)))
+    screen.blit(sub,   sub.get_rect(center=(cx, cy + 20)))
+    screen.blit(hint,  hint.get_rect(center=(cx, cy + 80)))

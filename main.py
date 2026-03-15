@@ -4,7 +4,7 @@ from civ_game.ui.renderer import render
 from civ_game.ui.hud import UIState, END_TURN_RECT
 from civ_game.ui.city_screen import handle_city_screen_click
 from civ_game.map.hex_grid import pixel_to_hex
-from civ_game.entities.unit import get_reachable_tiles
+from civ_game.entities.unit import get_reachable_tiles, get_attackable_tiles
 
 
 def handle_event(event, game, ui_state):
@@ -41,7 +41,24 @@ def handle_event(event, game, ui_state):
         _handle_key(event.key, game, ui_state)
 
 
+def _select_unit(unit, game, ui_state):
+    """Select a unit and compute its move/attack sets."""
+    ui_state.selected_unit = unit
+    ui_state.selected_tile = None
+    ui_state.selected_city = None
+    if unit.moves_left > 0:
+        ui_state.reachable_tiles = get_reachable_tiles(unit, game.tiles)
+        ui_state.attackable_tiles = get_attackable_tiles(unit, game.tiles)
+    else:
+        ui_state.reachable_tiles = set()
+        ui_state.attackable_tiles = set()
+
+
 def _handle_left_click(pos, game, ui_state):
+    # Block input if game is won
+    if game.winner is not None:
+        return
+
     # City screen consumes its own clicks
     if ui_state.city_screen_open:
         handle_city_screen_click(pos, ui_state, game)
@@ -60,29 +77,36 @@ def _handle_left_click(pos, game, ui_state):
     if not tile:
         return
 
-    civ = game.current_civ()
     selected_unit = ui_state.selected_unit
+
+    # Attack selected: click on attackable tile
+    if selected_unit and (q, r) in ui_state.attackable_tiles:
+        msg = game.do_attack(selected_unit, q, r)
+        if msg:
+            ui_state.set_message(msg)
+        ui_state.deselect()
+        # Re-select attacker if still alive
+        if selected_unit in game.civs[selected_unit.owner].units:
+            _select_unit(selected_unit, game, ui_state)
+        return
 
     # Move selected unit to reachable tile
     if selected_unit and (q, r) in ui_state.reachable_tiles:
         game.move_unit(selected_unit, q, r)
-        ui_state.reachable_tiles = set()
-        # Keep unit selected, recalculate reachable
+        # Recalculate after move
         if selected_unit.moves_left > 0:
             ui_state.reachable_tiles = get_reachable_tiles(selected_unit, game.tiles)
+            ui_state.attackable_tiles = get_attackable_tiles(selected_unit, game.tiles)
         else:
+            ui_state.reachable_tiles = set()
+            ui_state.attackable_tiles = set()
             ui_state.selected_unit = None
         return
 
     # Click on a tile with a unit belonging to current player
     unit = tile.unit or tile.civilian
     if unit and unit.owner == game.current_player:
-        ui_state.selected_unit = unit
-        ui_state.selected_tile = None
-        ui_state.selected_city = None
-        ui_state.reachable_tiles = (
-            get_reachable_tiles(unit, game.tiles) if unit.moves_left > 0 else set()
-        )
+        _select_unit(unit, game, ui_state)
         return
 
     # Click on a city tile
@@ -91,6 +115,7 @@ def _handle_left_click(pos, game, ui_state):
         ui_state.selected_unit = None
         ui_state.selected_tile = None
         ui_state.reachable_tiles = set()
+        ui_state.attackable_tiles = set()
         return
 
     # Plain tile select
@@ -98,9 +123,14 @@ def _handle_left_click(pos, game, ui_state):
     ui_state.selected_unit = None
     ui_state.selected_city = None
     ui_state.reachable_tiles = set()
+    ui_state.attackable_tiles = set()
 
 
 def _handle_key(key, game, ui_state):
+    # Block input if game is won
+    if game.winner is not None:
+        return
+
     unit = ui_state.selected_unit
     civ = game.current_civ()
 
@@ -135,14 +165,24 @@ def _handle_key(key, game, ui_state):
     elif key == pygame.K_m and unit and unit.unit_type == "worker":
         game.start_improvement(unit, "mine")
         ui_state.reachable_tiles = set()
+        ui_state.attackable_tiles = set()
 
     elif key == pygame.K_a and unit and unit.unit_type == "worker":
         game.start_improvement(unit, "farm")
         ui_state.reachable_tiles = set()
+        ui_state.attackable_tiles = set()
 
     elif key == pygame.K_p and unit and unit.unit_type == "worker":
         game.start_improvement(unit, "pasture")
         ui_state.reachable_tiles = set()
+        ui_state.attackable_tiles = set()
+
+    elif key == pygame.K_k and unit and not unit.is_civilian:
+        # Fortify unit
+        unit.fortified = True
+        unit.moves_left = 0
+        ui_state.reachable_tiles = set()
+        ui_state.attackable_tiles = set()
 
 
 def main():

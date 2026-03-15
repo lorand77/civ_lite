@@ -30,6 +30,7 @@ class UIState:
     selected_unit: object = None
     selected_city: object = None
     reachable_tiles: set = field(default_factory=set)
+    attackable_tiles: set = field(default_factory=set)
 
     city_screen_open: bool = False
     city_screen_item_rects: list = field(default_factory=list)
@@ -38,11 +39,19 @@ class UIState:
     tech_screen_open: bool = False
     turn_banner_timer: int = 0
 
+    message: str = ""
+    message_timer: int = 0
+
+    def set_message(self, msg: str, duration: int = 180):
+        self.message = msg
+        self.message_timer = duration
+
     def deselect(self):
         self.selected_tile = None
         self.selected_unit = None
         self.selected_city = None
         self.reachable_tiles = set()
+        self.attackable_tiles = set()
 
 
 _font_cache: dict[int, pygame.font.Font] = {}
@@ -94,7 +103,7 @@ def render_hud(screen, game, ui_state):
         f"Gold: {civ.gold}   Science: {civ.science}   Cities: {len(civ.cities)}",
         True, COLOR_TEXT_DIM), (rx, base_y + lh * 2))
     screen.blit(_font(20).render(
-        "Arrows/MMB=pan  Scroll=zoom  F=found  B=city  M/A/P=improve  Enter=end turn",
+        "Arrows/MMB=pan  F=found  B=city  M/A/P=improve  K=fortify  Enter=end turn",
         True, COLOR_TEXT_DIM), (rx, base_y + lh * 3))
 
     # END TURN button
@@ -112,10 +121,19 @@ def _draw_unit_info(screen, unit, game, lx, base_y, lh):
     defn = UNIT_DEFS[unit.unit_type]
     civ_color = PLAYER_COLORS[unit.owner]
 
-    screen.blit(_font(23).render(f"{defn['name']}  (HP {unit.hp}/{defn['hp_max']})",
+    fortify_str = "  [FORTIFIED]" if unit.fortified else ""
+    screen.blit(_font(23).render(f"{defn['name']}  HP {unit.hp}/{defn['hp_max']}{fortify_str}",
                                  True, civ_color), (lx, base_y))
+
+    str_val = defn['strength']
+    rstr = defn.get('ranged_strength')
+    rng  = defn.get('range')
+    if rstr:
+        str_info = f"Str: {str_val}  Ranged: {rstr}  Range: {rng}"
+    else:
+        str_info = f"Str: {str_val}"
     screen.blit(_font(20).render(
-        f"Moves: {unit.moves_left}/{defn['moves']}   Strength: {defn['strength']}",
+        f"Moves: {unit.moves_left}/{defn['moves']}   {str_info}",
         True, COLOR_TEXT), (lx, base_y + lh))
 
     if unit.building_improvement:
@@ -136,6 +154,10 @@ def _draw_unit_info(screen, unit, game, lx, base_y, lh):
                 hints.append("M=Mine")
         screen.blit(_font(20).render("Build:  " + "  ".join(hints) if hints else "No improvements here",
                                      True, COLOR_TEXT_DIM), (lx, base_y + lh * 2))
+    elif defn["type"] in ("melee", "ranged"):
+        hint = "Click red=attack  K=fortify"
+        screen.blit(_font(20).render(hint, True, (255, 160, 80)),
+                    (lx, base_y + lh * 2))
 
     # HP bar
     _draw_hp_bar(screen, lx, base_y + lh * 3 + 4, unit.hp, defn["hp_max"], 160)

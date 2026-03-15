@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from collections import deque
 
-from civ_game.map.hex_grid import hex_neighbors
+from civ_game.map.hex_grid import hex_neighbors, hex_distance
 from civ_game.map.terrain import TERRAIN_PASSABLE
 from civ_game.data.units import UNIT_DEFS
 
@@ -57,15 +57,69 @@ def get_reachable_tiles(unit: Unit, tiles: dict) -> set:
                 continue
             visited[(nq, nr)] = cost
 
-            # Can't end on a tile occupied by same-class friendly unit
             if unit.is_civilian:
+                # Friendly civilian blocks
                 if tile.civilian and tile.civilian.owner == unit.owner:
-                    continue  # blocked but keep BFS-ing through
+                    continue
+                # Enemy military blocks civilian movement
+                if tile.unit and tile.unit.owner != unit.owner:
+                    continue
+                reachable.add((nq, nr))
+                queue.append(((nq, nr), cost))
             else:
+                # Military: friendly blocks
                 if tile.unit and tile.unit.owner == unit.owner:
                     continue
-
-            reachable.add((nq, nr))
-            queue.append(((nq, nr), cost))
+                # Enemy military: attack target only, blocks movement
+                if tile.unit and tile.unit.owner != unit.owner:
+                    continue
+                # Enemy city: can BFS through (to reach beyond) but can't end here
+                if tile.city and tile.city.owner != unit.owner:
+                    queue.append(((nq, nr), cost))
+                    continue
+                # Enemy civilian: can capture (move there) but can't pass through
+                if tile.civilian and tile.civilian.owner != unit.owner:
+                    reachable.add((nq, nr))
+                    continue
+                reachable.add((nq, nr))
+                queue.append(((nq, nr), cost))
 
     return reachable
+
+
+def get_attackable_tiles(unit: Unit, tiles: dict) -> set:
+    """Returns set of (q,r) the unit can attack from its current position."""
+    if unit.is_civilian or unit.moves_left == 0:
+        return set()
+
+    defn = UNIT_DEFS[unit.unit_type]
+    attack_range = defn.get("range", 1)  # 1 = melee, 2 = ranged
+
+    targets = set()
+
+    if attack_range == 1:
+        # Melee: only adjacent tiles
+        for nq, nr in hex_neighbors(unit.q, unit.r):
+            tile = tiles.get((nq, nr))
+            if not tile:
+                continue
+            if tile.unit and tile.unit.owner != unit.owner:
+                targets.add((nq, nr))
+            elif tile.civilian and tile.civilian.owner != unit.owner:
+                targets.add((nq, nr))
+            elif tile.city and tile.city.owner != unit.owner:
+                targets.add((nq, nr))
+    else:
+        # Ranged: all tiles within attack_range
+        for (tq, tr), tile in tiles.items():
+            dist = hex_distance(unit.q, unit.r, tq, tr)
+            if dist == 0 or dist > attack_range:
+                continue
+            if tile.unit and tile.unit.owner != unit.owner:
+                targets.add((tq, tr))
+            elif tile.civilian and tile.civilian.owner != unit.owner:
+                targets.add((tq, tr))
+            elif tile.city and tile.city.owner != unit.owner:
+                targets.add((tq, tr))
+
+    return targets

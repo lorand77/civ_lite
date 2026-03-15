@@ -69,6 +69,7 @@ class Game:
         self.map_rows = map_rows
         self.current_player = 0
         self.turn = 1
+        self.winner = None  # player_index of domination winner
 
         self._rng = np.random.default_rng(
             None if seed is None else (seed ^ 0xABCD1234) & 0xFFFFFFFF
@@ -151,6 +152,7 @@ class Game:
                 tile.unit = unit
 
     def _place_starting_units(self):
+        from civ_game.map.hex_grid import hex_neighbors
         for i, civ in enumerate(self.civs):
             pos = self._find_start_tile(i)
             if not pos:
@@ -162,17 +164,32 @@ class Game:
             worker = Unit("worker", i, q, r,
                           hp=UNIT_DEFS["worker"]["hp_max"],
                           moves_left=UNIT_DEFS["worker"]["moves"])
-            # Place worker one tile away if possible
-            from civ_game.map.hex_grid import hex_neighbors
+            warrior = Unit("warrior", i, q, r,
+                           hp=UNIT_DEFS["warrior"]["hp_max"],
+                           moves_left=UNIT_DEFS["warrior"]["moves"])
+
+            # Spread out civilians to adjacent tiles
+            placed_civilians = [(q, r)]  # settler takes start tile
             for nq, nr in hex_neighbors(q, r):
                 t = self.tiles.get((nq, nr))
-                if t and TERRAIN_PASSABLE[t.terrain] and t.civilian is None:
+                if t and TERRAIN_PASSABLE[t.terrain] and (nq, nr) not in placed_civilians:
                     worker.q, worker.r = nq, nr
+                    placed_civilians.append((nq, nr))
                     break
 
-            civ.units = [settler, worker]
+            # Place warrior on another adjacent tile (not on a civilian)
+            for nq, nr in hex_neighbors(q, r):
+                t = self.tiles.get((nq, nr))
+                if (t and TERRAIN_PASSABLE[t.terrain]
+                        and (nq, nr) not in placed_civilians
+                        and t.unit is None):
+                    warrior.q, warrior.r = nq, nr
+                    break
+
+            civ.units = [settler, worker, warrior]
             self._place_unit(settler)
             self._place_unit(worker)
+            self._place_unit(warrior)
 
     def _init_camera(self):
         xs, ys = [], []
@@ -266,6 +283,143 @@ class Game:
         return True
 
     # ------------------------------------------------------------------
+    def remove_unit(self, unit: Unit):
+        """Remove a unit from the map and its civ's unit list."""
+        tile = self.tiles.get((unit.q, unit.r))
+        if tile:
+            if unit.is_civilian and tile.civilian is unit:
+                tile.civilian = None
+            elif not unit.is_civilian and tile.unit is unit:
+                tile.unit = None
+        civ = self.civs[unit.owner]
+        if unit in civ.units:
+            civ.units.remove(unit)
+
+    def _advance_unit(self, unit: Unit, tq: int, tr: int):
+        """Move unit to (tq, tr) after combat — no moves cost."""
+        old_tile = self.tiles.get((unit.q, unit.r))
+        if old_tile and old_tile.unit is unit:
+            old_tile.unit = None
+        unit.q, unit.r = tq, tr
+        new_tile = self.tiles.get((tq, tr))
+        if new_tile:
+            new_tile.unit = unit
+
+    def _capture_city(self, attacker: Unit, city):
+        """Transfer city ownership to attacker's civ and move attacker in."""
+        old_owner_idx = city.owner
+        new_owner_idx = attacker.owner
+
+        # Move attacker into city tile
+        old_tile = self.tiles.get((attacker.q, attacker.r))
+        if old_tile and old_tile.unit is attacker:
+            old_tile.unit = None
+
+        attacker.q, attacker.r = city.q, city.r
+        attacker.moves_left = 0
+
+        city_tile = self.tiles.get((city.q, city.r))
+        if city_tile:
+            city_tile.unit = attacker
+            city_tile.owner = new_owner_idx
+
+        # Transfer between civ city lists
+        old_civ = self.civs[old_owner_idx]
+        new_civ = self.civs[new_owner_idx]
+        if city in old_civ.cities:
+            old_civ.cities.remove(city)
+        new_civ.cities.append(city)
+
+        city.owner = new_owner_idx
+        city.hp = 50  # reset HP on capture
+
+        # Eliminate old civ if no cities remain
+        if not old_civ.cities:
+            old_civ.is_eliminated = True
+
+    def do_attack(self, attacker: Unit, target_q: int, target_r: int) -> str:
+        """
+        Execute an attack from attacker to (target_q, target_r).
+        Returns a human-readable result message.
+        """
+        from civ_game.systems.combat import melee_attack, ranged_attack, bombard_city
+        from civ_game.data.units import UNIT_DEFS as _DEFS
+
+        target_tile = self.tiles.get((target_q, target_r))
+        if not target_tile:
+            return ""
+
+        attacker_tile = self.tiles.get((attacker.q, attacker.r))
+        defn = _DEFS[attacker.unit_type]
+        unit_type = defn["type"]
+
+        # Consume all moves and cancel fortify
+        attacker.moves_left = 0
+        attacker.fortified = False
+        attacker.fortify_bonus = 0.0
+
+        target_unit = target_tile.unit or target_tile.civilian
+        target_city = target_tile.city
+        msg = ""
+
+        if target_unit and target_unit.owner != attacker.owner:
+            # ---- Attack enemy unit ----
+            if unit_type == "melee":
+                a_dmg, d_dmg = melee_attack(attacker, target_unit,
+                                             attacker_tile, target_tile)
+                msg = (f"{defn['name']} vs {_DEFS[target_unit.unit_type]['name']}: "
+                       f"-{a_dmg} / -{d_dmg} HP")
+            else:
+                d_dmg = ranged_attack(attacker, target_unit, target_tile)
+                msg = f"Ranged hit: {_DEFS[target_unit.unit_type]['name']} -{d_dmg} HP"
+
+            if target_unit.hp <= 0:
+                self.remove_unit(target_unit)
+                target_unit = None
+                if unit_type == "melee":
+                    # Advance after combat
+                    if target_city and target_city.owner != attacker.owner:
+                        self._capture_city(attacker, target_city)
+                        msg += " → City captured!"
+                    else:
+                        self._advance_unit(attacker, target_q, target_r)
+
+            if attacker.hp <= 0:
+                self.remove_unit(attacker)
+                msg += " (attacker died)"
+
+        elif target_city and target_city.owner != attacker.owner and not target_unit:
+            # ---- Attack undefended city ----
+            if unit_type == "ranged":
+                dmg = bombard_city(attacker, target_city)
+                msg = (f"Bombarded {target_city.name}: -{dmg} HP "
+                       f"(HP: {target_city.hp}/50)")
+            elif unit_type == "melee":
+                dmg = bombard_city(attacker, target_city)
+                if target_city.hp <= 0:
+                    self._capture_city(attacker, target_city)
+                    msg = f"Captured {target_city.name}!"
+                else:
+                    msg = (f"Attacked {target_city.name}: -{dmg} HP "
+                           f"(HP: {target_city.hp}/50)")
+
+        self.check_victory()
+        return msg
+
+    def check_victory(self):
+        """Check if any player owns all original capitals."""
+        if self.winner is not None:
+            return
+        original_caps = [c.original_capital for c in self.civs
+                         if c.original_capital is not None]
+        if not original_caps:
+            return
+        for civ in self.civs:
+            if all(cap.owner == civ.player_index for cap in original_caps):
+                self.winner = civ.player_index
+                return
+
+    # ------------------------------------------------------------------
     def _expand_border(self, civ):
         """Claim one unclaimed tile adjacent to this civ's territory (best yield first)."""
         from civ_game.map.hex_grid import hex_neighbors
@@ -320,6 +474,10 @@ class Game:
                 city.culture_stored -= 20
                 self._expand_border(civ)
 
+            # City HP regeneration
+            if city.hp < 50:
+                city.hp = min(50, city.hp + 5)
+
         # Worker improvement build progress
         for unit in list(civ.units):
             if unit.building_improvement and unit.build_turns_left > 0:
@@ -335,11 +493,23 @@ class Game:
         for city in civ.cities:
             process_production(city, civ, self)
 
-        # Reset unit movement
+        # Reset unit movement + handle fortification
         for unit in civ.units:
             unit.moves_left = UNIT_DEFS[unit.unit_type]["moves"]
+            if unit.fortified:
+                unit.fortify_bonus = min(0.5, unit.fortify_bonus + 0.25)
 
-        # Advance turn
-        self.current_player = (self.current_player + 1) % self.num_players
-        if self.current_player == 0:
+        # Advance to next non-eliminated player
+        next_player = (self.current_player + 1) % self.num_players
+        if next_player == 0:
             self.turn += 1
+        self.current_player = next_player
+
+        # Skip eliminated players (up to full loop)
+        for _ in range(self.num_players - 1):
+            if not self.civs[self.current_player].is_eliminated:
+                break
+            next_player = (self.current_player + 1) % self.num_players
+            if next_player == 0:
+                self.turn += 1
+            self.current_player = next_player
