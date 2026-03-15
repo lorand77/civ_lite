@@ -213,8 +213,8 @@ class Game:
         return self.civs[self.current_player]
 
     # ------------------------------------------------------------------
-    def move_unit(self, unit: Unit, q: int, r: int):
-        """Move unit to (q, r), updating tile references."""
+    def move_unit(self, unit: Unit, q: int, r: int, cost: int = 1):
+        """Move unit to (q, r), spending `cost` move points."""
         old_tile = self.tiles.get((unit.q, unit.r))
         if old_tile:
             if unit.is_civilian:
@@ -223,9 +223,10 @@ class Game:
                 old_tile.unit = None
 
         unit.q, unit.r = q, r
-        unit.moves_left = max(0, unit.moves_left - 1)
+        unit.moves_left = max(0, unit.moves_left - cost)
         unit.fortified = False
         unit.fortify_bonus = 0.0
+        unit.healing = False
         unit.building_improvement = None
         unit.build_turns_left = 0
 
@@ -353,10 +354,11 @@ class Game:
         defn = _DEFS[attacker.unit_type]
         unit_type = defn["type"]
 
-        # Consume all moves and cancel fortify
+        # Consume all moves and cancel fortify/healing
         attacker.moves_left = 0
         attacker.fortified = False
         attacker.fortify_bonus = 0.0
+        attacker.healing = False
 
         target_unit = target_tile.unit or target_tile.civilian
         target_city = target_tile.city
@@ -493,8 +495,11 @@ class Game:
         for city in civ.cities:
             process_production(city, civ, self)
 
-        # Reset unit movement + handle fortification
+        # Reset unit movement, handle fortification and healing
         for unit in civ.units:
+            if unit.healing:
+                hp_max = UNIT_DEFS[unit.unit_type]["hp_max"]
+                unit.hp = min(hp_max, unit.hp + 10)
             unit.moves_left = UNIT_DEFS[unit.unit_type]["moves"]
             if unit.fortified:
                 unit.fortify_bonus = min(0.5, unit.fortify_bonus + 0.25)

@@ -24,6 +24,7 @@ UNIT_DEFS = {
         "name": "Spearman", "type": "melee",
         "strength": 11, "moves": 2, "hp_max": 100, "prod_cost": 60,
         "requires_tech": "bronze_working", "requires_resource": None, "label": "Sp",
+        "bonus_vs": {"horseman": 1.0},  # +100% attack and defense vs Horseman
     },
     "swordsman": {
         "name": "Swordsman", "type": "melee",
@@ -40,5 +41,6 @@ UNIT_DEFS = {
         "strength": 5, "ranged_strength": 8, "range": 2,
         "moves": 2, "hp_max": 100, "prod_cost": 100,
         "requires_tech": "mathematics", "requires_resource": None, "label": "Ca",
+        "bonus_vs_city": 2.0,  # +200% attack vs cities
     },
 }

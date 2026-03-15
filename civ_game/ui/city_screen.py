@@ -110,9 +110,12 @@ def render_city_screen(screen, city, civ, ui_state):
     ui_state.city_screen_item_rects = []
     mouse = pygame.mouse.get_pos()
 
-    # Show buildings not yet built
+    # Show buildings not yet built (tech requirements met)
     for key, defn in BUILDING_DEFS.items():
         if key == "palace" or key in city.buildings:
+            continue
+        req_tech = defn.get("requires_tech")
+        if req_tech and req_tech not in civ.techs_researched:
             continue
         if y + 28 > my + MODAL_H - 54:
             break
@@ -127,9 +130,24 @@ def render_city_screen(screen, city, civ, ui_state):
         ui_state.city_screen_item_rects.append((rect, key))
         y += 32
 
-    # Show basic units
-    for key in ("warrior", "settler", "worker"):
-        defn = UNIT_DEFS[key]
+    # Show all buildable units (tech and resource requirements met)
+    for key, defn in UNIT_DEFS.items():
+        if defn["type"] == "civilian" and key not in ("settler", "worker"):
+            continue
+        req_tech = defn.get("requires_tech")
+        if req_tech and req_tech not in civ.techs_researched:
+            continue
+        req_res = defn.get("requires_resource")
+        if req_res:
+            # Check if civ has this resource connected (worked by any city)
+            has_res = any(
+                _city_screen_tiles.get((tq, tr)) and
+                _city_screen_tiles[(tq, tr)].resource == req_res
+                for c in [city]
+                for tq, tr in c.worked_tiles
+            )
+            if not has_res:
+                continue
         if y + 28 > my + MODAL_H - 54:
             break
         cost = defn["prod_cost"]

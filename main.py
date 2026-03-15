@@ -92,7 +92,8 @@ def _handle_left_click(pos, game, ui_state):
 
     # Move selected unit to reachable tile
     if selected_unit and (q, r) in ui_state.reachable_tiles:
-        game.move_unit(selected_unit, q, r)
+        cost = ui_state.reachable_tiles[(q, r)]
+        game.move_unit(selected_unit, q, r, cost=cost)
         # Recalculate after move
         if selected_unit.moves_left > 0:
             ui_state.reachable_tiles = get_reachable_tiles(selected_unit, game.tiles)
@@ -180,9 +181,21 @@ def _handle_key(key, game, ui_state):
     elif key == pygame.K_k and unit and not unit.is_civilian:
         # Fortify unit
         unit.fortified = True
+        unit.healing = False
         unit.moves_left = 0
         ui_state.reachable_tiles = set()
         ui_state.attackable_tiles = set()
+
+    elif key == pygame.K_h and unit and not unit.is_civilian:
+        from civ_game.data.units import UNIT_DEFS as _UD
+        # Heal: only allowed when unit has full movement points
+        if unit.moves_left == _UD[unit.unit_type]["moves"]:
+            unit.healing = True
+            unit.fortified = False
+            unit.fortify_bonus = 0.0
+            unit.moves_left = 0
+            ui_state.reachable_tiles = set()
+            ui_state.attackable_tiles = set()
 
 
 def main():

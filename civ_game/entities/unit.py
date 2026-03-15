@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from collections import deque
 
 from civ_game.map.hex_grid import hex_neighbors, hex_distance
-from civ_game.map.terrain import TERRAIN_PASSABLE
+from civ_game.map.terrain import TERRAIN_PASSABLE, TERRAIN_MOVE_COST
 from civ_game.data.units import UNIT_DEFS
 
 
@@ -18,6 +18,7 @@ class Unit:
     xp: int = 0
     fortified: bool = False
     fortify_bonus: float = 0.0
+    healing: bool = False
     building_improvement: str | None = None  # worker: improvement being built
     build_turns_left: int = 0
 
@@ -34,13 +35,17 @@ class Unit:
         return UNIT_DEFS[self.unit_type]["name"]
 
 
-def get_reachable_tiles(unit: Unit, tiles: dict) -> set:
-    """BFS — returns set of (q,r) the unit can move to this turn."""
+def get_reachable_tiles(unit: Unit, tiles: dict) -> dict:
+    """
+    BFS — returns dict of {(q,r): move_cost} for all tiles the unit can
+    move to this turn.  Using a dict means callers can still use `in` and
+    iterate over keys exactly like a set, but also look up the actual cost.
+    """
     start = (unit.q, unit.r)
     max_moves = unit.moves_left
     visited = {start: 0}
     queue = deque([(start, 0)])
-    reachable = set()
+    reachable = {}          # (q,r) -> cost to reach
 
     while queue:
         (q, r), used = queue.popleft()
@@ -50,7 +55,7 @@ def get_reachable_tiles(unit: Unit, tiles: dict) -> set:
                 continue
             if not TERRAIN_PASSABLE[tile.terrain]:
                 continue
-            cost = used + 1
+            cost = used + TERRAIN_MOVE_COST[tile.terrain]
             if cost > max_moves:
                 continue
             if (nq, nr) in visited and visited[(nq, nr)] <= cost:
@@ -64,7 +69,7 @@ def get_reachable_tiles(unit: Unit, tiles: dict) -> set:
                 # Enemy military blocks civilian movement
                 if tile.unit and tile.unit.owner != unit.owner:
                     continue
-                reachable.add((nq, nr))
+                reachable[(nq, nr)] = cost
                 queue.append(((nq, nr), cost))
             else:
                 # Military: friendly blocks
@@ -79,9 +84,9 @@ def get_reachable_tiles(unit: Unit, tiles: dict) -> set:
                     continue
                 # Enemy civilian: can capture (move there) but can't pass through
                 if tile.civilian and tile.civilian.owner != unit.owner:
-                    reachable.add((nq, nr))
+                    reachable[(nq, nr)] = cost
                     continue
-                reachable.add((nq, nr))
+                reachable[(nq, nr)] = cost
                 queue.append(((nq, nr), cost))
 
     return reachable

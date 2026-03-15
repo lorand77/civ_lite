@@ -161,9 +161,11 @@ def render(screen, game, camera, ui_state):
             r_unit = max(7, hs // 4)
             pygame.draw.circle(screen, civ.color, (ux, uy), r_unit)
             pygame.draw.circle(screen, (0, 0, 0), (ux, uy), r_unit, 2)
-            # Fortified ring
+            # Fortified ring (blue) / healing ring (green)
             if unit.fortified:
                 pygame.draw.circle(screen, (200, 200, 255), (ux, uy), r_unit + 2, 2)
+            elif unit.healing:
+                pygame.draw.circle(screen, (80, 220, 80), (ux, uy), r_unit + 2, 2)
             lbl = _font(22).render(unit.label, True, (255, 255, 255))
             screen.blit(lbl, (ux - lbl.get_width() // 2, uy - lbl.get_height() // 2))
             # Grey out if no moves left (current player only)

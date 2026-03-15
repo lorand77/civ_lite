@@ -24,6 +24,14 @@ TERRAIN_PASSABLE = {
     "ocean":     False,
 }
 
+TERRAIN_MOVE_COST = {
+    "grassland": 1,
+    "plains":    1,
+    "hills":     2,
+    "forest":    2,
+    "ocean":     99,  # impassable
+}
+
 # Colors (R, G, B)
 TERRAIN_COLORS = {
     "grassland": (106, 168, 79),

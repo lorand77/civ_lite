@@ -103,7 +103,7 @@ def render_hud(screen, game, ui_state):
         f"Gold: {civ.gold}   Science: {civ.science}   Cities: {len(civ.cities)}",
         True, COLOR_TEXT_DIM), (rx, base_y + lh * 2))
     screen.blit(_font(20).render(
-        "Arrows/MMB=pan  F=found  B=city  M/A/P=improve  K=fortify  Enter=end turn",
+        "Arrows/MMB=pan  F=found  B=city  M/A/P=improve  K=fortify  H=heal  Enter=end turn",
         True, COLOR_TEXT_DIM), (rx, base_y + lh * 3))
 
     # END TURN button
@@ -121,8 +121,8 @@ def _draw_unit_info(screen, unit, game, lx, base_y, lh):
     defn = UNIT_DEFS[unit.unit_type]
     civ_color = PLAYER_COLORS[unit.owner]
 
-    fortify_str = "  [FORTIFIED]" if unit.fortified else ""
-    screen.blit(_font(23).render(f"{defn['name']}  HP {unit.hp}/{defn['hp_max']}{fortify_str}",
+    status = "  [FORTIFIED]" if unit.fortified else ("  [HEALING]" if unit.healing else "")
+    screen.blit(_font(23).render(f"{defn['name']}  HP {unit.hp}/{defn['hp_max']}{status}",
                                  True, civ_color), (lx, base_y))
 
     str_val = defn['strength']
@@ -155,7 +155,7 @@ def _draw_unit_info(screen, unit, game, lx, base_y, lh):
         screen.blit(_font(20).render("Build:  " + "  ".join(hints) if hints else "No improvements here",
                                      True, COLOR_TEXT_DIM), (lx, base_y + lh * 2))
     elif defn["type"] in ("melee", "ranged"):
-        hint = "Click red=attack  K=fortify"
+        hint = "Click red=attack  K=fortify  H=heal (+10 HP/turn)"
         screen.blit(_font(20).render(hint, True, (255, 160, 80)),
                     (lx, base_y + lh * 2))
 
