@@ -41,7 +41,7 @@ def compute_city_yields(city, tiles, civ):
         totals["science"] += eff.get("science_per_turn", 0)
         totals["culture"] += eff.get("culture_per_turn", 0)
 
-    # Base science per city
-    totals["science"] += 1
+    # Base science: 1 per city + 1 per citizen
+    totals["science"] += 1 + city.population
 
     return totals

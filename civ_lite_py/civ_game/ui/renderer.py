@@ -3,8 +3,10 @@ from civ_game.map.hex_grid import hex_to_pixel, hex_corners, HEX_DIRECTIONS
 from civ_game.map.terrain import TERRAIN_COLORS, RESOURCE_COLORS
 from civ_game.data.units import UNIT_DEFS
 from civ_game.entities.improvement import IMPROVEMENT_DEFS
+from civ_game.map.terrain import RESOURCES
 from civ_game.ui.hud import render_hud
 from civ_game.ui.city_screen import render_city_screen, set_tiles
+from civ_game.ui.tech_screen import render_tech_screen
 
 SCREEN_W = 1850
 SCREEN_H = 1000
@@ -81,10 +83,15 @@ def render(screen, game, camera, ui_state):
                                  (int(corners[c1][0]), int(corners[c1][1])),
                                  border_w)
 
-    # --- Layer 3: Resources ---
+    # --- Layer 3: Resources (only if revealed to current player) ---
+    current_techs = game.current_civ().techs_researched
     for (q, r), tile in game.tiles.items():
         if not tile.resource:
             continue
+        res_def = RESOURCES.get(tile.resource, {})
+        req_tech = res_def.get("requires_tech")
+        if req_tech and req_tech not in current_techs:
+            continue  # not yet revealed to this player
         cx, cy = hex_to_pixel(q, r, ox, oy, hs)
         if not _on_screen(cx, cy, hs):
             continue
@@ -195,13 +202,17 @@ def render(screen, game, camera, ui_state):
     # --- Layer 9: HUD ---
     render_hud(screen, game, ui_state)
 
-    # --- Layer 10: City screen ---
+    # --- Layer 10: Tech screen ---
+    if ui_state.tech_screen_open:
+        render_tech_screen(screen, game.current_civ(), ui_state)
+
+    # --- Layer 11: City screen ---
     if ui_state.city_screen_open and ui_state.selected_city:
         set_tiles(game.tiles)
         render_city_screen(screen, ui_state.selected_city,
                            game.civs[ui_state.selected_city.owner], ui_state)
 
-    # --- Layer 11: Combat message ---
+    # --- Layer 12: Combat message ---
     if ui_state.message_timer > 0:
         ui_state.message_timer -= 1
         msg_surf = _font(28).render(ui_state.message, True, (255, 230, 100))
@@ -213,7 +224,7 @@ def render(screen, game, camera, ui_state):
         screen.blit(bg, (mx - 10, my - 5))
         screen.blit(msg_surf, (mx, my))
 
-    # --- Layer 12: Win screen ---
+    # --- Layer 13: Win screen ---
     if game.winner is not None:
         _render_win_screen(screen, game.winner)
 

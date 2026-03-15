@@ -2,7 +2,8 @@ import pygame
 from civ_game.game import Game
 from civ_game.ui.renderer import render
 from civ_game.ui.hud import UIState, END_TURN_RECT
-from civ_game.ui.city_screen import handle_city_screen_click
+from civ_game.ui.city_screen import handle_city_screen_click, handle_city_screen_scroll
+from civ_game.ui.tech_screen import handle_tech_screen_click
 from civ_game.map.hex_grid import pixel_to_hex
 from civ_game.entities.unit import get_reachable_tiles, get_attackable_tiles
 
@@ -21,10 +22,16 @@ def handle_event(event, game, ui_state):
             ui_state.pan_start = event.pos
 
         elif event.button == 4:
-            camera.zoom = 1
+            if ui_state.city_screen_open:
+                handle_city_screen_scroll(-1, ui_state)
+            else:
+                camera.zoom = 1
 
         elif event.button == 5:
-            camera.zoom = 0
+            if ui_state.city_screen_open:
+                handle_city_screen_scroll(1, ui_state)
+            else:
+                camera.zoom = 0
 
     elif event.type == pygame.MOUSEMOTION:
         if ui_state.pan_start:
@@ -54,9 +61,22 @@ def _select_unit(unit, game, ui_state):
         ui_state.attackable_tiles = set()
 
 
+def _do_end_turn(game, ui_state):
+    game.end_turn()
+    if game.pending_message:
+        ui_state.set_message(game.pending_message)
+        game.pending_message = None
+    ui_state.deselect()
+
+
 def _handle_left_click(pos, game, ui_state):
     # Block input if game is won
     if game.winner is not None:
+        return
+
+    # Tech screen consumes its own clicks
+    if ui_state.tech_screen_open:
+        handle_tech_screen_click(pos, game.current_civ(), ui_state)
         return
 
     # City screen consumes its own clicks
@@ -66,8 +86,7 @@ def _handle_left_click(pos, game, ui_state):
 
     # END TURN button
     if END_TURN_RECT.collidepoint(pos):
-        game.end_turn()
-        ui_state.deselect()
+        _do_end_turn(game, ui_state)
         return
 
     camera = game.camera
@@ -133,11 +152,13 @@ def _handle_key(key, game, ui_state):
         return
 
     unit = ui_state.selected_unit
-    civ = game.current_civ()
 
     if key == pygame.K_RETURN:
-        game.end_turn()
-        ui_state.deselect()
+        _do_end_turn(game, ui_state)
+
+    elif key == pygame.K_t:
+        ui_state.tech_screen_open = not ui_state.tech_screen_open
+        ui_state.city_screen_open = False  # close city screen if open
 
     elif key == pygame.K_b:
         # Open city screen for selected city, or city on selected unit's tile
@@ -149,9 +170,12 @@ def _handle_key(key, game, ui_state):
         if city:
             ui_state.selected_city = city
             ui_state.city_screen_open = True
+            ui_state.city_screen_scroll = 0
 
     elif key == pygame.K_ESCAPE:
-        if ui_state.city_screen_open:
+        if ui_state.tech_screen_open:
+            ui_state.tech_screen_open = False
+        elif ui_state.city_screen_open:
             ui_state.city_screen_open = False
         else:
             ui_state.deselect()

@@ -35,6 +35,7 @@ class UIState:
     city_screen_open: bool = False
     city_screen_item_rects: list = field(default_factory=list)
     city_screen_close_rect: object = None
+    city_screen_scroll: int = 0
 
     tech_screen_open: bool = False
     turn_banner_timer: int = 0
@@ -99,11 +100,22 @@ def render_hud(screen, game, ui_state):
                 (rx, base_y))
     screen.blit(_font(20).render(civ.name, True, PLAYER_COLORS[civ.player_index]),
                 (rx, base_y + lh))
+
+    # Science with cost context
+    if civ.current_research:
+        from civ_game.data.techs import TECH_DEFS
+        tech_cost = TECH_DEFS[civ.current_research]["science_cost"]
+        sci_str = (f"Gold: {civ.gold}   Sci: {civ.science}/{tech_cost}"
+                   f"   {TECH_DEFS[civ.current_research]['name']}")
+        sci_color = (120, 200, 255)
+    else:
+        sci_str = (f"Gold: {civ.gold}   Science: {civ.science}   Cities: {len(civ.cities)}"
+                   f"   [T=Research]")
+        sci_color = COLOR_TEXT_DIM
+    screen.blit(_font(20).render(sci_str, True, sci_color), (rx, base_y + lh * 2))
+
     screen.blit(_font(20).render(
-        f"Gold: {civ.gold}   Science: {civ.science}   Cities: {len(civ.cities)}",
-        True, COLOR_TEXT_DIM), (rx, base_y + lh * 2))
-    screen.blit(_font(20).render(
-        "Arrows/MMB=pan  F=found  B=city  M/A/P=improve  K=fortify  H=heal  Enter=end turn",
+        "Arrows/MMB=pan  F=found  B=city  M/A/P=improve  K=fortify  H=heal  T=tech  Enter=end",
         True, COLOR_TEXT_DIM), (rx, base_y + lh * 3))
 
     # END TURN button
@@ -146,13 +158,17 @@ def _draw_unit_info(screen, unit, game, lx, base_y, lh):
                     (lx, base_y + lh * 2))
     elif unit.unit_type == "worker":
         tile = game.tiles.get((unit.q, unit.r))
+        civ = game.civs[unit.owner]
         hints = []
         if tile:
             if tile.terrain in ("grassland", "plains"):
-                hints += ["A=Farm", "P=Pasture"]
+                hints.append("A=Farm")
+                if "animal_husbandry" in civ.techs_researched:
+                    hints.append("P=Pasture")
             if tile.terrain == "hills":
-                hints.append("M=Mine")
-        screen.blit(_font(20).render("Build:  " + "  ".join(hints) if hints else "No improvements here",
+                if "mining" in civ.techs_researched:
+                    hints.append("M=Mine")
+        screen.blit(_font(20).render("Build:  " + "  ".join(hints) if hints else "No improvements available",
                                      True, COLOR_TEXT_DIM), (lx, base_y + lh * 2))
     elif defn["type"] in ("melee", "ranged"):
         hint = "Click red=attack  K=fortify  H=heal (+10 HP/turn)"

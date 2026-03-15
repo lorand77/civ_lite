@@ -74,5 +74,13 @@ def _complete_item(city, civ, game, item_key):
                     placed = True
                     break
 
-        if placed:
+        if not placed:
+            # Force-place on city tile — all adjacent tiles are occupied.
+            # The player will need to move units to free space.
+            if defn["type"] == "civilian":
+                tile.civilian = unit
+            else:
+                tile.unit = unit
+            civ.units.append(unit)
+        else:
             civ.units.append(unit)

@@ -8,9 +8,12 @@ SCREEN_H = 1000
 HUD_HEIGHT = 180
 
 MODAL_W = 720
-MODAL_H = 580
+MODAL_H = 620
 MODAL_X = (SCREEN_W - MODAL_W) // 2
 MODAL_Y = (SCREEN_H - HUD_HEIGHT - MODAL_H) // 2
+
+ITEM_H = 32
+SCROLL_W = 12
 
 COLOR_BG      = (25, 25, 35)
 COLOR_BORDER  = (120, 120, 160)
@@ -23,6 +26,7 @@ COLOR_CLOSE   = (90, 40, 40)
 COLOR_CLOSE_H = (130, 60, 60)
 
 _font_cache: dict = {}
+
 
 def _font(size):
     if size not in _font_cache:
@@ -67,11 +71,9 @@ def render_city_screen(screen, city, civ, ui_state):
         turns_to_grow = max(1, (threshold - city.food_stored + net - 1) // net)
     food_str = (f"Food: {city.food_stored}/{threshold} stored  "
                 f"(net {net:+d}/turn,  {turns_to_grow} turns to grow)")
-    screen.blit(_font(21).render(food_str, True, COLOR_TEXT), (lx, y)); y += line_h + 8
+    screen.blit(_font(21).render(food_str, True, COLOR_TEXT), (lx, y)); y += line_h + 6
 
-    # Divider
-    pygame.draw.line(screen, COLOR_BORDER, (mx + 8, y), (mx + MODAL_W - 8, y), 1)
-    y += 8
+    pygame.draw.line(screen, COLOR_BORDER, (mx + 8, y), (mx + MODAL_W - 8, y), 1); y += 8
 
     # Production section
     screen.blit(_font(23).render("Production", True, COLOR_TEXT), (lx, y)); y += line_h
@@ -88,49 +90,41 @@ def render_city_screen(screen, city, civ, ui_state):
         pygame.draw.rect(screen, (80, 140, 80), (lx, y, filled, 22))
         pygame.draw.rect(screen, COLOR_BORDER, (lx, y, bar_w, 22), 1)
         label = _item_name(current_key)
-        bar_text = _font(20).render(f"{label}  {city.production_progress}/{cost}  ({turns} turns)", True, COLOR_TEXT)
+        bar_text = _font(20).render(
+            f"{label}  {city.production_progress}/{cost}  ({turns} turns)", True, COLOR_TEXT)
         screen.blit(bar_text, (lx + 4, y + 2)); y += 30
     else:
         screen.blit(_font(21).render("Nothing queued", True, COLOR_DIM), (lx, y)); y += line_h
 
     y += 4
-    pygame.draw.line(screen, COLOR_BORDER, (mx + 8, y), (mx + MODAL_W - 8, y), 1)
-    y += 8
+    pygame.draw.line(screen, COLOR_BORDER, (mx + 8, y), (mx + MODAL_W - 8, y), 1); y += 8
 
-    # Buildings
-    bld_names = ", ".join(BUILDING_DEFS[b]["name"] for b in city.buildings) or "None"
-    screen.blit(_font(21).render(f"Buildings: {bld_names}", True, COLOR_DIM), (lx, y)); y += line_h + 4
+    # Buildings list
+    bld_names = ", ".join(BUILDING_DEFS[b]["name"] for b in city.buildings
+                          if b in BUILDING_DEFS) or "None"
+    screen.blit(_font(21).render(f"Buildings: {bld_names}", True, COLOR_DIM), (lx, y))
+    y += line_h + 4
 
-    pygame.draw.line(screen, COLOR_BORDER, (mx + 8, y), (mx + MODAL_W - 8, y), 1)
-    y += 8
+    pygame.draw.line(screen, COLOR_BORDER, (mx + 8, y), (mx + MODAL_W - 8, y), 1); y += 8
 
-    # Available to build
-    screen.blit(_font(23).render("Build:", True, COLOR_TEXT), (lx, y)); y += line_h
+    # "Build:" header
+    screen.blit(_font(23).render("Build:  (scroll to see all)", True, COLOR_TEXT), (lx, y))
+    y += line_h
 
-    ui_state.city_screen_item_rects = []
-    mouse = pygame.mouse.get_pos()
+    # --- Build all available items into a flat list ---
+    all_items = []
+    prod_pt = max(1, yields["prod"])
 
-    # Show buildings not yet built (tech requirements met)
     for key, defn in BUILDING_DEFS.items():
         if key == "palace" or key in city.buildings:
             continue
         req_tech = defn.get("requires_tech")
         if req_tech and req_tech not in civ.techs_researched:
             continue
-        if y + 28 > my + MODAL_H - 54:
-            break
         cost = defn["prod_cost"]
-        prod_pt = max(1, yields["prod"])
         turns = max(1, (cost + prod_pt - 1) // prod_pt)
-        label = f"[{defn['name']}  —  {cost} prod  ({turns} turns)]"
-        rect = pygame.Rect(lx, y, MODAL_W - 28, 28)
-        color = COLOR_BUILD_H if rect.collidepoint(mouse) else COLOR_BUILD
-        pygame.draw.rect(screen, color, rect, border_radius=3)
-        screen.blit(_font(20).render(label, True, COLOR_TEXT), (lx + 4, y + 4))
-        ui_state.city_screen_item_rects.append((rect, key))
-        y += 32
+        all_items.append((key, f"[{defn['name']}  —  {cost} prod  ({turns} turns)]"))
 
-    # Show all buildable units (tech and resource requirements met)
     for key, defn in UNIT_DEFS.items():
         if defn["type"] == "civilian" and key not in ("settler", "worker"):
             continue
@@ -139,30 +133,58 @@ def render_city_screen(screen, city, civ, ui_state):
             continue
         req_res = defn.get("requires_resource")
         if req_res:
-            # Check if civ has this resource connected (worked by any city)
             has_res = any(
                 _city_screen_tiles.get((tq, tr)) and
                 _city_screen_tiles[(tq, tr)].resource == req_res
-                for c in [city]
+                for c in civ.cities
                 for tq, tr in c.worked_tiles
             )
             if not has_res:
                 continue
-        if y + 28 > my + MODAL_H - 54:
-            break
         cost = defn["prod_cost"]
-        prod_pt = max(1, yields["prod"])
         turns = max(1, (cost + prod_pt - 1) // prod_pt)
-        label = f"[{defn['name']}  —  {cost} prod  ({turns} turns)]"
-        rect = pygame.Rect(lx, y, MODAL_W - 28, 28)
+        all_items.append((key, f"[{defn['name']}  —  {cost} prod  ({turns} turns)]"))
+
+    # --- Scrollable list area ---
+    list_top = y
+    list_bottom = my + MODAL_H - 50   # leave room for close button
+    list_area_h = list_bottom - list_top
+    visible_count = max(1, list_area_h // ITEM_H)
+
+    # Clamp scroll
+    max_scroll = max(0, len(all_items) - visible_count)
+    ui_state.city_screen_scroll = max(0, min(ui_state.city_screen_scroll, max_scroll))
+    scroll = ui_state.city_screen_scroll
+
+    # Clip to list area so items don't bleed into the close button zone
+    screen.set_clip(pygame.Rect(mx, list_top, MODAL_W, list_area_h))
+
+    mouse = pygame.mouse.get_pos()
+    ui_state.city_screen_item_rects = []
+    item_rect_w = MODAL_W - 28 - SCROLL_W - 6
+
+    for i, (key, label) in enumerate(all_items[scroll: scroll + visible_count]):
+        item_y = list_top + i * ITEM_H
+        rect = pygame.Rect(lx, item_y, item_rect_w, 28)
         color = COLOR_BUILD_H if rect.collidepoint(mouse) else COLOR_BUILD
         pygame.draw.rect(screen, color, rect, border_radius=3)
-        screen.blit(_font(20).render(label, True, COLOR_TEXT), (lx + 4, y + 4))
+        screen.blit(_font(20).render(label, True, COLOR_TEXT), (lx + 4, item_y + 4))
         ui_state.city_screen_item_rects.append((rect, key))
-        y += 32
 
-    # Close button
-    close_rect = pygame.Rect(mx + MODAL_W - 120, my + MODAL_H - 46, 106, 36)
+    screen.set_clip(None)
+
+    # --- Scrollbar ---
+    if len(all_items) > visible_count:
+        track_x = mx + MODAL_W - SCROLL_W - 6
+        track_rect = pygame.Rect(track_x, list_top, SCROLL_W, list_area_h)
+        pygame.draw.rect(screen, (35, 35, 55), track_rect, border_radius=4)
+        thumb_h = max(18, list_area_h * visible_count // max(1, len(all_items)))
+        thumb_y = list_top + (list_area_h - thumb_h) * scroll // max(1, max_scroll)
+        thumb_rect = pygame.Rect(track_x, thumb_y, SCROLL_W, thumb_h)
+        pygame.draw.rect(screen, (110, 110, 175), thumb_rect, border_radius=4)
+
+    # --- Close button ---
+    close_rect = pygame.Rect(mx + MODAL_W - 120, my + MODAL_H - 44, 106, 34)
     color = COLOR_CLOSE_H if close_rect.collidepoint(mouse) else COLOR_CLOSE
     pygame.draw.rect(screen, color, close_rect, border_radius=3)
     pygame.draw.rect(screen, COLOR_BORDER, close_rect, 1, border_radius=3)
@@ -202,7 +224,7 @@ def handle_city_screen_click(pos, ui_state, game):
         return False
 
     # Close button
-    if ui_state.city_screen_close_rect and ui_state.city_screen_close_rect.collidepoint(pos): # type: ignore
+    if ui_state.city_screen_close_rect and ui_state.city_screen_close_rect.collidepoint(pos):
         ui_state.city_screen_open = False
         return True
 
@@ -217,8 +239,13 @@ def handle_city_screen_click(pos, ui_state, game):
             return True
 
     # Click outside modal → close
-    mx, my = MODAL_X, MODAL_Y
-    if not pygame.Rect(mx, my, MODAL_W, MODAL_H).collidepoint(pos):
+    if not pygame.Rect(MODAL_X, MODAL_Y, MODAL_W, MODAL_H).collidepoint(pos):
         ui_state.city_screen_open = False
 
-    return True  # consume all clicks while screen is open
+    return True  # consume all clicks while open
+
+
+def handle_city_screen_scroll(direction, ui_state):
+    """direction: +1 scroll down, -1 scroll up. Clamping happens during render."""
+    if ui_state.city_screen_open:
+        ui_state.city_screen_scroll += direction

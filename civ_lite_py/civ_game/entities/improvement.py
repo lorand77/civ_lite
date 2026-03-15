@@ -2,7 +2,7 @@ IMPROVEMENT_DEFS = {
     "farm": {
         "name": "Farm", "build_turns": 3,
         "valid_terrain": ["grassland", "plains"],
-        "requires_tech": "pottery",
+        "requires_tech": None,
         "yield_bonus": {"food": 1}, "label": "f",
     },
     "mine": {

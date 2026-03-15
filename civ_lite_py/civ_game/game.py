@@ -79,6 +79,8 @@ class Game:
         self.civs = self._create_civs()
         self._place_starting_units()
 
+        self.pending_message = None   # set during end_turn for notifications
+
         self.camera = Camera()
         self._init_camera()
 
@@ -235,6 +237,9 @@ class Game:
             if unit.is_civilian:
                 new_tile.civilian = unit
             else:
+                # If an enemy civilian is on the destination tile, capture it
+                if new_tile.civilian and new_tile.civilian.owner != unit.owner:
+                    self.remove_unit(new_tile.civilian)
                 new_tile.unit = unit
 
     def found_city(self, unit: Unit):
@@ -277,6 +282,11 @@ class Game:
         defn = IMPROVEMENT_DEFS[improvement_key]
         tile = self.tiles.get((unit.q, unit.r))
         if not tile or tile.terrain not in defn["valid_terrain"]:
+            return False
+        # Check tech requirement
+        civ = self.civs[unit.owner]
+        req_tech = defn.get("requires_tech")
+        if req_tech and req_tech not in civ.techs_researched:
             return False
         unit.building_improvement = improvement_key
         unit.build_turns_left = defn["build_turns"]
@@ -479,6 +489,17 @@ class Game:
             # City HP regeneration
             if city.hp < 50:
                 city.hp = min(50, city.hp + 5)
+
+        # Research progress
+        if civ.current_research:
+            from civ_game.data.techs import TECH_DEFS
+            tech_cost = TECH_DEFS[civ.current_research]["science_cost"]
+            if civ.science >= tech_cost:
+                civ.science -= tech_cost
+                tech_name = TECH_DEFS[civ.current_research]["name"]
+                civ.techs_researched.add(civ.current_research)
+                civ.current_research = None
+                self.pending_message = f"{tech_name} researched!"
 
         # Worker improvement build progress
         for unit in list(civ.units):
