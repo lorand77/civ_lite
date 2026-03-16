@@ -62,21 +62,18 @@ RESOURCES = {
         "valid_terrain": ["plains", "grassland"],
         "yield_bonus": {"gold": 3},
         "requires_tech": None,
-        "happiness_bonus": 1,
     },
     "silver": {
         "type": "luxury",
         "valid_terrain": ["hills"],
         "yield_bonus": {"gold": 2},
         "requires_tech": "mining",
-        "happiness_bonus": 1,
     },
     "diamonds": {
         "type": "luxury",
         "valid_terrain": ["forest", "hills"],
         "yield_bonus": {"gold": 4},
         "requires_tech": None,
-        "happiness_bonus": 1,
     },
 }
 

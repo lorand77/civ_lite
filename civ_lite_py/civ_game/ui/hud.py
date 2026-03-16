@@ -42,6 +42,8 @@ class UIState:
 
     message: str = ""
     message_timer: int = 0
+    queued_message: str = ""   # shown after turn banner clears
+    auto_open_tech: bool = False  # open tech screen after banner clears
 
     def set_message(self, msg: str, duration: int = 180):
         self.message = msg

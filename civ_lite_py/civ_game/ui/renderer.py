@@ -212,19 +212,39 @@ def render(screen, game, camera, ui_state):
         render_city_screen(screen, ui_state.selected_city,
                            game.civs[ui_state.selected_city.owner], ui_state)
 
-    # --- Layer 12: Combat message ---
+    # --- Layer 12: Notification popup (supports multi-line) ---
     if ui_state.message_timer > 0:
         ui_state.message_timer -= 1
-        msg_surf = _font(28).render(ui_state.message, True, (255, 230, 100))
-        mx = SCREEN_W // 2 - msg_surf.get_width() // 2
-        my = (SCREEN_H - HUD_HEIGHT) // 2 - 20
-        bg = pygame.Surface((msg_surf.get_width() + 20, msg_surf.get_height() + 10),
-                             pygame.SRCALPHA)
-        bg.fill((0, 0, 0, 160))
-        screen.blit(bg, (mx - 10, my - 5))
-        screen.blit(msg_surf, (mx, my))
+        lines = ui_state.message.split("\n")
+        line_surfs = [_font(28).render(ln, True, (255, 230, 100)) for ln in lines]
+        pad = 14
+        line_h = line_surfs[0].get_height() + 4
+        total_h = line_h * len(line_surfs) + pad
+        total_w = max(s.get_width() for s in line_surfs) + pad * 2
+        bx = SCREEN_W // 2 - total_w // 2
+        by = (SCREEN_H - HUD_HEIGHT) // 3
+        bg = pygame.Surface((total_w, total_h), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 180))
+        screen.blit(bg, (bx, by))
+        pygame.draw.rect(screen, (200, 180, 80), (bx, by, total_w, total_h), 1)
+        for i, surf in enumerate(line_surfs):
+            screen.blit(surf, (SCREEN_W // 2 - surf.get_width() // 2,
+                               by + pad // 2 + i * line_h))
 
-    # --- Layer 13: Win screen ---
+    # --- Layer 13: Turn banner (hotseat handoff) ---
+    if ui_state.turn_banner_timer > 0:
+        _render_turn_banner(screen, game)
+        ui_state.turn_banner_timer -= 1
+        if ui_state.turn_banner_timer == 0:
+            # Banner just expired naturally — promote any queued message
+            if ui_state.queued_message:
+                ui_state.set_message(ui_state.queued_message)
+                ui_state.queued_message = ""
+            if ui_state.auto_open_tech:
+                ui_state.tech_screen_open = True
+                ui_state.auto_open_tech = False
+
+    # --- Layer 14: Win screen ---
     if game.winner is not None:
         _render_win_screen(screen, game.winner)
 
@@ -236,6 +256,37 @@ def _draw_hp_bar_inline(screen, x, y, hp, max_hp, width=40):
     pygame.draw.rect(screen, (80, 20, 20), (x, y, width, 5))
     pygame.draw.rect(screen, (220, 60, 60), (x, y, filled, 5))
     pygame.draw.rect(screen, (140, 140, 140), (x, y, width, 5), 1)
+
+
+def _render_turn_banner(screen, game):
+    from civ_game.game import PLAYER_NAMES, PLAYER_COLORS as _PC
+
+    player = game.current_player
+    color  = _PC[player]
+    name   = PLAYER_NAMES[player]
+
+    overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 160))
+    screen.blit(overlay, (0, 0))
+
+    cx = SCREEN_W // 2
+    cy = SCREEN_H // 2
+
+    title = _font(80).render(f"{name}'s Turn", True, color)
+    sub   = _font(30).render(f"Turn {game.turn}  —  click or press any key to continue",
+                             True, (200, 200, 200))
+
+    pygame.draw.rect(screen, (20, 20, 30),
+                     (cx - title.get_width() // 2 - 30, cy - 70,
+                      title.get_width() + 60, title.get_height() + sub.get_height() + 30),
+                     border_radius=10)
+    pygame.draw.rect(screen, color,
+                     (cx - title.get_width() // 2 - 30, cy - 70,
+                      title.get_width() + 60, title.get_height() + sub.get_height() + 30),
+                     3, border_radius=10)
+
+    screen.blit(title, title.get_rect(center=(cx, cy - 20)))
+    screen.blit(sub,   sub.get_rect(center=(cx, cy + title.get_height() // 2 + 10)))
 
 
 def _render_win_screen(screen, winner):

@@ -79,7 +79,7 @@ class Game:
         self.civs = self._create_civs()
         self._place_starting_units()
 
-        self.pending_message = None   # set during end_turn for notifications
+        self.pending_messages: list[str] = []  # collected during end_turn
 
         self.camera = Camera()
         self._init_camera()
@@ -347,6 +347,9 @@ class Game:
         # Eliminate old civ if no cities remain
         if not old_civ.cities:
             old_civ.is_eliminated = True
+            for unit in list(old_civ.units):
+                self.remove_unit(unit)
+            old_civ.units.clear()
 
     def do_attack(self, attacker: Unit, target_q: int, target_r: int) -> str:
         """
@@ -391,8 +394,11 @@ class Game:
                 if unit_type == "melee" and attacker.hp > 0:
                     # Advance after combat (only if attacker survived)
                     if target_city and target_city.owner != attacker.owner:
+                        old_owner_idx = target_city.owner
                         self._capture_city(attacker, target_city)
-                        msg += " → City captured!"
+                        msg += f" → {target_city.name} captured!"
+                        if self.civs[old_owner_idx].is_eliminated:
+                            msg += f" {self.civs[old_owner_idx].name} eliminated!"
                     else:
                         self._advance_unit(attacker, target_q, target_r)
 
@@ -407,10 +413,13 @@ class Game:
                 msg = (f"Bombarded {target_city.name}: -{dmg} HP "
                        f"(HP: {target_city.hp}/50)")
             elif unit_type == "melee":
+                old_owner_idx = target_city.owner
                 dmg = bombard_city(attacker, target_city)
                 if target_city.hp <= 0:
                     self._capture_city(attacker, target_city)
                     msg = f"Captured {target_city.name}!"
+                    if self.civs[old_owner_idx].is_eliminated:
+                        msg += f" {self.civs[old_owner_idx].name} eliminated!"
                 else:
                     msg = (f"Attacked {target_city.name}: -{dmg} HP "
                            f"(HP: {target_city.hp}/50)")
@@ -460,6 +469,43 @@ class Game:
         best = max(candidates, key=score)
         self.tiles[best].owner = civ.player_index
 
+    def _apply_bankruptcy(self, civ):
+        """Civ ran out of gold: lose a random military unit or non-palace building."""
+        import random
+        from civ_game.data.buildings import BUILDING_DEFS
+
+        # Build pool of losable things
+        losable = []
+
+        for unit in civ.units:
+            if not unit.is_civilian:
+                losable.append(("unit", unit, None))
+
+        for city in civ.cities:
+            for b_key in city.buildings:
+                if b_key != "palace":
+                    losable.append(("building", b_key, city))
+
+        civ.gold = 0
+
+        if not losable:
+            civ.pending_messages.append("Bankruptcy! No gold left.")
+            return
+
+        kind, obj, city = random.choice(losable)
+        if kind == "unit":
+            from civ_game.data.units import UNIT_DEFS as _UD
+            name = _UD[obj.unit_type]["name"]
+            self.remove_unit(obj)
+            civ.pending_messages.append(
+                f"Bankruptcy! {name} disbanded — treasury emptied.")
+        else:
+            from civ_game.data.buildings import BUILDING_DEFS as _BD
+            name = _BD[obj]["name"]
+            city.buildings.remove(obj)
+            civ.pending_messages.append(
+                f"Bankruptcy! {name} in {city.name} lost — treasury emptied.")
+
     def end_turn(self):
         civ = self.current_civ()
 
@@ -475,7 +521,7 @@ class Game:
                 city.food_stored = 0
                 auto_assign_worked_tiles(city, self.tiles)
 
-            # Gold + science
+            # Gold (includes building maintenance subtracted in yields) + science
             civ.gold += yields["gold"]
             civ.science += yields["science"]
 
@@ -490,6 +536,11 @@ class Game:
             if city.hp < 50:
                 city.hp = min(50, city.hp + 5)
 
+        # Unit maintenance: 1 gold per military unit per turn
+        for unit in civ.units:
+            if not unit.is_civilian:
+                civ.gold -= 1
+
         # Research progress
         if civ.current_research:
             from civ_game.data.techs import TECH_DEFS
@@ -499,7 +550,8 @@ class Game:
                 tech_name = TECH_DEFS[civ.current_research]["name"]
                 civ.techs_researched.add(civ.current_research)
                 civ.current_research = None
-                self.pending_message = f"{tech_name} researched!"
+                civ.pending_messages.append(f"{tech_name} researched!")
+                civ.research_just_completed = True
 
         # Worker improvement build progress
         for unit in list(civ.units):
@@ -514,7 +566,9 @@ class Game:
         # Production (separate loop to avoid double-processing new units)
         from civ_game.systems.production import process_production
         for city in civ.cities:
-            process_production(city, civ, self)
+            msg = process_production(city, civ, self)
+            if msg:
+                civ.pending_messages.append(msg)
 
         # Reset unit movement, handle fortification and healing
         for unit in civ.units:
@@ -524,6 +578,10 @@ class Game:
             unit.moves_left = UNIT_DEFS[unit.unit_type]["moves"]
             if unit.fortified:
                 unit.fortify_bonus = min(0.5, unit.fortify_bonus + 0.25)
+
+        # Bankruptcy: negative gold → lose a random military unit or building
+        if civ.gold < 0:
+            self._apply_bankruptcy(civ)
 
         # Advance to next non-eliminated player, incrementing turn on wrap-around
         for _ in range(self.num_players):

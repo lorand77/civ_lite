@@ -31,7 +31,7 @@ def compute_city_yields(city, tiles, civ):
             for k, v in imp["yield_bonus"].items():
                 totals[k] = totals.get(k, 0) + v
 
-    # Building bonuses
+    # Building bonuses and maintenance
     for b_key in city.buildings:
         b = BUILDING_DEFS[b_key]
         eff = b["effects"]
@@ -40,6 +40,7 @@ def compute_city_yields(city, tiles, civ):
         totals["gold"]    += eff.get("gold_per_turn", 0)
         totals["science"] += eff.get("science_per_turn", 0)
         totals["culture"] += eff.get("culture_per_turn", 0)
+        totals["gold"]    -= b.get("maintenance", 0)
 
     # Base science: 1 per city + 1 per citizen
     totals["science"] += 1 + city.population

@@ -61,17 +61,41 @@ def _select_unit(unit, game, ui_state):
         ui_state.attackable_tiles = set()
 
 
+def _promote_queued_message(ui_state):
+    """Promote a queued start-of-turn message and open tech screen if needed."""
+    if ui_state.queued_message:
+        ui_state.set_message(ui_state.queued_message)
+        ui_state.queued_message = ""
+    if ui_state.auto_open_tech:
+        ui_state.tech_screen_open = True
+        ui_state.auto_open_tech = False
+
+
 def _do_end_turn(game, ui_state):
     game.end_turn()
-    if game.pending_message:
-        ui_state.set_message(game.pending_message)
-        game.pending_message = None
     ui_state.deselect()
+    ui_state.turn_banner_timer = 120  # 2 seconds at 60 fps
+
+    # Queue start-of-turn messages for the new current player
+    # (tech completions, unit/building completions — all shown after turn banner)
+    new_civ = game.current_civ()
+    if new_civ.pending_messages:
+        ui_state.queued_message = "\n".join(new_civ.pending_messages)
+        new_civ.pending_messages.clear()
+    if new_civ.research_just_completed:
+        ui_state.auto_open_tech = True
+        new_civ.research_just_completed = False
 
 
 def _handle_left_click(pos, game, ui_state):
     # Block input if game is won
     if game.winner is not None:
+        return
+
+    # Dismiss turn banner on click
+    if ui_state.turn_banner_timer > 0:
+        ui_state.turn_banner_timer = 0
+        _promote_queued_message(ui_state)
         return
 
     # Tech screen consumes its own clicks
@@ -149,6 +173,12 @@ def _handle_left_click(pos, game, ui_state):
 def _handle_key(key, game, ui_state):
     # Block input if game is won
     if game.winner is not None:
+        return
+
+    # Dismiss turn banner on any key press
+    if ui_state.turn_banner_timer > 0:
+        ui_state.turn_banner_timer = 0
+        _promote_queued_message(ui_state)
         return
 
     unit = ui_state.selected_unit

@@ -16,9 +16,11 @@ class Civilization:
     science: int = 0
     science_per_turn: int = 0
     culture: int = 0
-    happiness: int = 0
+
 
     current_research: str | None = None
     techs_researched: set = field(default_factory=set)
     original_capital: object = None
     is_eliminated: bool = False
+    pending_messages: list = field(default_factory=list)  # shown at start of next turn
+    research_just_completed: bool = False  # set when a tech finishes this turn

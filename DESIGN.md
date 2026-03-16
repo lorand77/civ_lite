@@ -266,21 +266,21 @@ RESOURCES = {
         "valid_terrain": ["plains", "grassland"],
         "yield_bonus": {"gold": 3},
         "requires_tech": None,            # always visible
-        "happiness_bonus": 1,
+
     },
     "silver": {
         "type": "luxury",
         "valid_terrain": ["hills"],
         "yield_bonus": {"gold": 2},
         "requires_tech": "mining",
-        "happiness_bonus": 1,
+
     },
     "diamonds": {
         "type": "luxury",
         "valid_terrain": ["forest", "hills"],
         "yield_bonus": {"gold": 4},
         "requires_tech": None,
-        "happiness_bonus": 1,
+
     },
 }
 
@@ -339,7 +339,6 @@ class Civilization:
     science: int = 0        # accumulated beakers
     science_per_turn: int = 0
     culture: int = 0        # accumulated (only for border growth)
-    happiness: int = 0      # count of connected luxury resources
     current_research: str | None = None   # tech key being researched
     techs_researched: set = field(default_factory=set)
     original_capital: City | None = None  # set when first city founded

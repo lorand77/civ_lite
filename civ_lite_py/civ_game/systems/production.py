@@ -11,9 +11,10 @@ def get_item_cost(item_key):
 
 
 def process_production(city, civ, game):
-    """Advance production queue by city's prod yield. Complete items if ready."""
+    """Advance production queue by city's prod yield. Complete items if ready.
+    Returns a notification string if something was completed, else None."""
     if not city.production_queue:
-        return
+        return None
 
     from civ_game.systems.yields import compute_city_yields
     yields = compute_city_yields(city, game.tiles, civ)
@@ -24,15 +25,19 @@ def process_production(city, civ, game):
 
     if city.production_progress >= cost:
         city.production_progress -= cost
-        _complete_item(city, civ, game, item_key)
+        msg = _complete_item(city, civ, game, item_key)
         city.production_queue.pop(0)
+        return msg
+
+    return None
 
 
 def _complete_item(city, civ, game, item_key):
     if item_key in BUILDING_DEFS:
         if item_key not in city.buildings:
             city.buildings.append(item_key)
-        return
+        name = BUILDING_DEFS[item_key]["name"]
+        return f"{city.name}: {name} built!"
 
     if item_key in UNIT_DEFS:
         from civ_game.entities.unit import Unit
@@ -44,6 +49,7 @@ def _complete_item(city, civ, game, item_key):
             hp=defn["hp_max"],
             moves_left=defn["moves"],
         )
+        unit_name = defn["name"]
         # Place on city tile (or nearest free tile)
         tile = game.tiles.get((city.q, city.r))
         placed = False
@@ -84,3 +90,5 @@ def _complete_item(city, civ, game, item_key):
             civ.units.append(unit)
         else:
             civ.units.append(unit)
+
+        return f"{city.name}: {unit_name} trained!"
