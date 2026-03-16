@@ -34,7 +34,7 @@ class Unit:
         return UNIT_DEFS[self.unit_type]["name"]
 
 
-def get_reachable_tiles(unit: Unit, tiles: dict) -> dict:
+def get_reachable_tiles(unit: Unit, tiles: dict, turn: int = 99) -> dict:
     """
     BFS — returns dict of {(q,r): move_cost} for all tiles the unit can
     move to this turn.  Using a dict means callers can still use `in` and
@@ -62,8 +62,8 @@ def get_reachable_tiles(unit: Unit, tiles: dict) -> dict:
             visited[(nq, nr)] = cost
 
             if unit.is_civilian:
-                # Friendly civilian blocks
-                if tile.civilian and tile.civilian.owner == unit.owner:
+                # Any civilian blocks (friendly or enemy)
+                if tile.civilian:
                     continue
                 # Enemy military blocks civilian movement
                 if tile.unit and tile.unit.owner != unit.owner:
@@ -82,7 +82,10 @@ def get_reachable_tiles(unit: Unit, tiles: dict) -> dict:
                     queue.append(((nq, nr), cost))
                     continue
                 # Enemy civilian: can capture (move there) but can't pass through
+                # Exception: settlers are untouchable on turn 1
                 if tile.civilian and tile.civilian.owner != unit.owner:
+                    if turn <= 1 and tile.civilian.unit_type == "settler":
+                        continue
                     reachable[(nq, nr)] = cost
                     continue
                 reachable[(nq, nr)] = cost

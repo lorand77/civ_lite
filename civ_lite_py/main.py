@@ -54,7 +54,7 @@ def _select_unit(unit, game, ui_state):
     ui_state.selected_tile = None
     ui_state.selected_city = None
     if unit.moves_left > 0:
-        ui_state.reachable_tiles = get_reachable_tiles(unit, game.tiles)
+        ui_state.reachable_tiles = get_reachable_tiles(unit, game.tiles, game.turn)
         ui_state.attackable_tiles = get_attackable_tiles(unit, game.tiles)
     else:
         ui_state.reachable_tiles = {}
@@ -72,13 +72,25 @@ def _promote_queued_message(ui_state):
 
 
 def _do_end_turn(game, ui_state):
+    from civ_game.map.hex_grid import hex_to_pixel, HEX_SIZE
     game.end_turn()
     ui_state.deselect()
     ui_state.turn_banner_timer = 120  # 2 seconds at 60 fps
 
+    # Center camera on the new player's capital, or settler if not yet founded
+    new_civ = game.current_civ()
+    cap = new_civ.original_capital
+    if cap:
+        px, py = hex_to_pixel(cap.q, cap.r, hex_size=HEX_SIZE)
+        game.camera.center_on_pixel(px, py)
+    else:
+        settler = next((u for u in new_civ.units if u.unit_type == "settler"), None)
+        if settler:
+            px, py = hex_to_pixel(settler.q, settler.r, hex_size=HEX_SIZE)
+            game.camera.center_on_pixel(px, py)
+
     # Queue start-of-turn messages for the new current player
     # (tech completions, unit/building completions — all shown after turn banner)
-    new_civ = game.current_civ()
     if new_civ.pending_messages:
         ui_state.queued_message = "\n".join(new_civ.pending_messages)
         new_civ.pending_messages.clear()

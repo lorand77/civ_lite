@@ -238,8 +238,10 @@ class Game:
                 new_tile.civilian = unit
             else:
                 # If an enemy civilian is on the destination tile, capture it
+                # (settlers are protected from capture on turn 1)
                 if new_tile.civilian and new_tile.civilian.owner != unit.owner:
-                    self.remove_unit(new_tile.civilian)
+                    if not (self.turn <= 1 and new_tile.civilian.unit_type == "settler"):
+                        self.remove_unit(new_tile.civilian)
                 new_tile.unit = unit
 
     def found_city(self, unit: Unit):
@@ -344,6 +346,12 @@ class Game:
         city.owner = new_owner_idx
         city.hp = 50  # reset HP on capture
 
+        # Transfer all territory tiles that belonged to this city
+        for hq, hr in hexes_in_range(city.q, city.r, 3):
+            t = self.tiles.get((hq, hr))
+            if t and t.owner == old_owner_idx:
+                t.owner = new_owner_idx
+
         # Eliminate old civ if no cities remain
         if not old_civ.cities:
             old_civ.is_eliminated = True
@@ -362,6 +370,12 @@ class Game:
         target_tile = self.tiles.get((target_q, target_r))
         if not target_tile:
             return ""
+
+        # Settlers are protected from attack on turn 1
+        if self.turn <= 1:
+            target_unit_check = target_tile.unit or target_tile.civilian
+            if target_unit_check and target_unit_check.unit_type == "settler":
+                return ""
 
         attacker_tile = self.tiles.get((attacker.q, attacker.r))
         defn = _DEFS[attacker.unit_type]
@@ -431,6 +445,8 @@ class Game:
         """Check if any player owns all original capitals."""
         if self.winner is not None:
             return
+        if self.turn <= 1:
+            return  # no victory possible before everyone has had a chance to settle
         original_caps = [c.original_capital for c in self.civs
                          if c.original_capital is not None]
         if not original_caps:
@@ -574,7 +590,9 @@ class Game:
         for unit in civ.units:
             if unit.healing:
                 hp_max = UNIT_DEFS[unit.unit_type]["hp_max"]
-                unit.hp = min(hp_max, unit.hp + 10)
+                tile = self.tiles.get((unit.q, unit.r))
+                in_own_territory = tile and tile.owner == civ.player_index
+                unit.hp = min(hp_max, unit.hp + (20 if in_own_territory else 10))
             unit.moves_left = UNIT_DEFS[unit.unit_type]["moves"]
             if unit.fortified:
                 unit.fortify_bonus = min(0.5, unit.fortify_bonus + 0.25)

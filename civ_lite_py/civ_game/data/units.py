@@ -1,7 +1,7 @@
 UNIT_DEFS = {
     "warrior": {
         "name": "Warrior", "type": "melee",
-        "strength": 8, "moves": 2, "hp_max": 100, "prod_cost": 40,
+        "strength": 8, "moves": 200, "hp_max": 100, "prod_cost": 40,
         "requires_tech": None, "requires_resource": None, "label": "W",
     },
     "archer": {
@@ -17,7 +17,7 @@ UNIT_DEFS = {
     },
     "worker": {
         "name": "Worker", "type": "civilian",
-        "strength": 0, "moves": 2, "hp_max": 100, "prod_cost": 60,
+        "strength": 0, "moves": 200, "hp_max": 100, "prod_cost": 60,
         "requires_tech": None, "requires_resource": None, "label": "Wo",
     },
     "spearman": {

@@ -173,7 +173,10 @@ def _draw_unit_info(screen, unit, game, lx, base_y, lh):
         screen.blit(_font(20).render("Build:  " + "  ".join(hints) if hints else "No improvements available",
                                      True, COLOR_TEXT_DIM), (lx, base_y + lh * 2))
     elif defn["type"] in ("melee", "ranged"):
-        hint = "Click red=attack  K=fortify  H=heal (+10 HP/turn)"
+        tile = game.tiles.get((unit.q, unit.r))
+        in_own = tile and tile.owner == unit.owner
+        hp_rate = 20 if in_own else 10
+        hint = f"Click red=attack  K=fortify  H=heal (+{hp_rate} HP/turn)"
         screen.blit(_font(20).render(hint, True, (255, 160, 80)),
                     (lx, base_y + lh * 2))
 
