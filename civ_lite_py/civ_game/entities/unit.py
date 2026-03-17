@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from collections import deque
 
 from civ_game.map.hex_grid import hex_neighbors, hex_distance

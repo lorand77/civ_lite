@@ -31,6 +31,10 @@ def compute_city_yields(city, tiles, civ):
             for k, v in imp["yield_bonus"].items():
                 totals[k] = totals.get(k, 0) + v
 
+        # Forge: +1 prod on hills tiles
+        if tile.terrain == "hills" and "forge" in city.buildings:
+            totals["prod"] += 1
+
     # Building bonuses and maintenance
     for b_key in city.buildings:
         b = BUILDING_DEFS[b_key]
