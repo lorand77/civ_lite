@@ -43,4 +43,34 @@ UNIT_DEFS = {
         "requires_tech": "mathematics", "requires_resource": None, "label": "Ca",
         "bonus_vs_city": 2.0,  # +200% attack vs cities
     },
+    # Medieval Era
+    "pikeman": {
+        "name": "Pikeman", "type": "melee",
+        "strength": 16, "moves": 2, "hp_max": 100, "prod_cost": 90,
+        "requires_tech": "feudalism", "requires_resource": None, "label": "Pi",
+        "bonus_vs": {"horseman": 1.5, "knight": 1.5},
+    },
+    "longswordsman": {
+        "name": "Longswordsman", "type": "melee",
+        "strength": 21, "moves": 2, "hp_max": 100, "prod_cost": 100,
+        "requires_tech": "steel", "requires_resource": "iron", "label": "Ls",
+    },
+    "knight": {
+        "name": "Knight", "type": "melee",
+        "strength": 20, "moves": 4, "hp_max": 100, "prod_cost": 120,
+        "requires_tech": "steel", "requires_resource": "horses", "label": "Kn",
+    },
+    "crossbowman": {
+        "name": "Crossbowman", "type": "ranged",
+        "strength": 12, "ranged_strength": 18, "range": 2,
+        "moves": 2, "hp_max": 100, "prod_cost": 90,
+        "requires_tech": "machinery", "requires_resource": None, "label": "Xb",
+    },
+    "trebuchet": {
+        "name": "Trebuchet", "type": "ranged",
+        "strength": 13, "ranged_strength": 14, "range": 2,
+        "moves": 2, "hp_max": 100, "prod_cost": 120,
+        "requires_tech": "machinery", "requires_resource": None, "label": "Tr",
+        "bonus_vs_city": 2.5,
+    },
 }

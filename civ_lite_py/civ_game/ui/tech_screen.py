@@ -18,6 +18,13 @@ NODE_POSITIONS = {
     "writing":           (640, 460),
     "mathematics":       (920, 393),
     "currency":          (920, 520),
+    # Medieval Era
+    "feudalism":         (1140, 90),
+    "steel":             (1140, 200),
+    "machinery":         (1140, 330),
+    "theology":          (1140, 440),
+    "civil_service":     (1140, 570),
+    "education":         (1360, 440),
 }
 
 PLAYER_COLORS = [
@@ -79,6 +86,8 @@ def render_tech_screen(screen, civ, ui_state):
                 (PANEL_X + 80, PANEL_Y + 80))
     screen.blit(_font(22).render("-- CLASSICAL ERA --", True, (130, 130, 180)),
                 (PANEL_X + 590, PANEL_Y + 80))
+    screen.blit(_font(22).render("-- MEDIEVAL ERA --", True, (130, 130, 180)),
+                (PANEL_X + 1100, PANEL_Y + 50))
 
     # Draw prerequisite connection lines
     for tech_key, defn in TECH_DEFS.items():
