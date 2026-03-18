@@ -14,7 +14,7 @@ SCREEN_W = 1850
 SCREEN_H = 1000
 HUD_HEIGHT = 180
 
-PLAYER_NAMES = ["Player 1", "Player 2", "Player 3", "Player 4"]
+PLAYER_NAMES = ["Rome", "Greece", "The Huns", "Babylon"]
 PLAYER_COLORS = [
     (220, 50,  50),
     (50,  100, 220),
@@ -24,9 +24,9 @@ PLAYER_COLORS = [
 
 CITY_NAMES = [
     ["Rome",    "Florence", "Venice",  "Genoa",   "Naples"],
-    ["Athens",  "Sparta",   "Corinth", "Thebes",  "Argos"],
-    ["Delhi",   "Agra",     "Patna",   "Mysore",  "Lahore"],
-    ["Babylon", "Ur",       "Nineveh", "Kish",    "Akkad"],
+    ["Athens",  "Sparta",   "Corinth", "Delphi",  "Argos"],
+    ["Attila's Court",   "Pannonia",     "Germania",   "Gothia",  "Scythia"],
+    ["Babylon", "Ur", "Nineveh", "Kish",    "Akkad"],
 ]
 
 

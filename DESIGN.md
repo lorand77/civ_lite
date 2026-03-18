@@ -11,7 +11,7 @@ This document reflects the **actual implemented state** of the game. It is the s
 - **Victory**: Domination only — capture all other civilizations' original capitals
 - **AI**: None in v1
 - **Map**: 32 × 20 pointy-top hex grid, procedurally generated
-- **Art**: Colored shapes only — no external image assets
+- **Art**: PNG terrain images and resource icons; colored shapes as fallback
 - **Libraries**: `pygame`, `numpy` (installed in `.venv`)
 - **Python**: 3.12 (`.venv` at `/workspace/.venv`)
 - **Entry point**: `cd /workspace/civ_lite_py && ../.venv/bin/python main.py`
@@ -24,10 +24,11 @@ This document reflects the **actual implemented state** of the game. It is the s
 /workspace/
 ├── DESIGN.md                    ← this file
 └── civ_lite_py/
-    ├── main.py                  ← entry point
+    ├── main.py                  ← entry point + input handling + hotseat flow
     └── civ_game/
         ├── __init__.py
         ├── game.py              # Game state, Camera, turn manager, win detection
+        ├── assets/              # PNG terrain and resource images
         ├── map/
         │   ├── hex_grid.py      # Axial hex math, pixel↔hex, neighbors, distance
         │   ├── terrain.py       # Terrain & resource definitions + yields
@@ -43,7 +44,7 @@ This document reflects the **actual implemented state** of the game. It is the s
         │   ├── tech_tree.py     # Tech prerequisites helper functions
         │   └── yields.py        # Per-city yield calculation
         ├── ui/
-        │   ├── renderer.py      # All pygame drawing
+        │   ├── renderer.py      # All pygame drawing + asset loading
         │   ├── hud.py           # Bottom info bar + UIState dataclass
         │   ├── city_screen.py   # City detail popup
         │   └── tech_screen.py   # Tech tree overlay
@@ -108,7 +109,7 @@ def hex_neighbors(q, r) -> list[(q,r)]
 def hex_distance(q1, r1, q2, r2) -> int
 def hex_ring(q, r, radius) -> list[(q,r)]
 def hexes_in_range(q, r, n) -> list[(q,r)]
-def hex_corners(cx, cy, hex_size=HEX_SIZE) -> list[(x,y)]
+def hex_corners(cx, cy, hex_size=HEX_SIZE) -> list[(x,y)]   # angle = 60*i - 30°
 def offset_to_axial(col, row) -> (q, r)
 ```
 
@@ -132,6 +133,8 @@ class Tile:
     civilian: Unit | None = None    # civilian unit (Settler/Worker)
     owner: int | None = None        # player index who owns this tile
 ```
+
+Both `unit` and `civilian` can coexist on the same tile (military unit + civilian unit together).
 
 ---
 
@@ -209,7 +212,7 @@ RESOURCES = {
         "type": "luxury",
         "valid_terrain": ["hills"],
         "yield_bonus": {"gold": 2},
-        "requires_tech": "mining",
+        "requires_tech": None,           # always visible
     },
     "diamonds": {
         "type": "luxury",
@@ -354,34 +357,75 @@ name: str           # UNIT_DEFS[unit_type]["name"]
 
 ```python
 UNIT_DEFS = {
-    "warrior":   { "type": "melee",    "strength": 8,
-                   "moves": 2, "hp_max": 100, "prod_cost": 40,
-                   "requires_tech": None,  "requires_resource": None, "label": "W"  },
-    "archer":    { "type": "ranged",   "strength": 5, "ranged_strength": 7, "range": 2,
-                   "moves": 2, "hp_max": 100, "prod_cost": 40,
-                   "requires_tech": "archery", "requires_resource": None, "label": "A" },
-    "settler":   { "type": "civilian", "strength": 0,
-                   "moves": 2, "hp_max": 100, "prod_cost": 100,
-                   "requires_tech": None,  "requires_resource": None, "label": "Se" },
-    "worker":    { "type": "civilian", "strength": 0,
-                   "moves": 2, "hp_max": 100, "prod_cost": 60,
-                   "requires_tech": None,  "requires_resource": None, "label": "Wo" },
-    "spearman":  { "type": "melee",    "strength": 11,
-                   "moves": 2, "hp_max": 100, "prod_cost": 60,
-                   "requires_tech": "bronze_working", "requires_resource": None,
-                   "bonus_vs": {"horseman": 1.0},      "label": "Sp" },
-    "swordsman": { "type": "melee",    "strength": 14,
-                   "moves": 2, "hp_max": 100, "prod_cost": 80,
-                   "requires_tech": "iron_working", "requires_resource": "iron",
-                   "label": "Sw" },
-    "horseman":  { "type": "melee",    "strength": 12,
-                   "moves": 4, "hp_max": 100, "prod_cost": 80,
-                   "requires_tech": "horseback_riding", "requires_resource": "horses",
-                   "label": "H"  },
-    "catapult":  { "type": "ranged",   "strength": 5, "ranged_strength": 8, "range": 2,
-                   "moves": 2, "hp_max": 100, "prod_cost": 100,
-                   "requires_tech": "mathematics", "requires_resource": None,
-                   "bonus_vs_city": 2.0,               "label": "Ca" },
+    # ── Civilian ──────────────────────────────────────────────────────────────
+    "settler":       { "type": "civilian", "strength": 0,
+                       "moves": 2, "hp_max": 100, "prod_cost": 100,
+                       "requires_tech": None, "requires_resource": None,
+                       "label": "Se" },
+    "worker":        { "type": "civilian", "strength": 0,
+                       "moves": 2, "hp_max": 100, "prod_cost": 60,
+                       "requires_tech": None, "requires_resource": None,
+                       "label": "Wo" },
+
+    # ── Ancient Melee ─────────────────────────────────────────────────────────
+    "warrior":       { "type": "melee", "strength": 8,
+                       "moves": 2, "hp_max": 100, "prod_cost": 40,
+                       "requires_tech": None, "requires_resource": None,
+                       "label": "W" },
+    "spearman":      { "type": "melee", "strength": 11,
+                       "moves": 2, "hp_max": 100, "prod_cost": 60,
+                       "requires_tech": "bronze_working", "requires_resource": None,
+                       "bonus_vs": {"horseman": 1.0},   # +100% vs Horseman
+                       "label": "Sp" },
+
+    # ── Ancient Ranged ────────────────────────────────────────────────────────
+    "archer":        { "type": "ranged", "strength": 5, "ranged_strength": 7, "range": 2,
+                       "moves": 2, "hp_max": 100, "prod_cost": 40,
+                       "requires_tech": "archery", "requires_resource": None,
+                       "label": "A" },
+
+    # ── Classical Melee ───────────────────────────────────────────────────────
+    "swordsman":     { "type": "melee", "strength": 14,
+                       "moves": 2, "hp_max": 100, "prod_cost": 80,
+                       "requires_tech": "iron_working", "requires_resource": "iron",
+                       "label": "Sw" },
+    "horseman":      { "type": "melee", "strength": 12,
+                       "moves": 4, "hp_max": 100, "prod_cost": 80,
+                       "requires_tech": "horseback_riding", "requires_resource": "horses",
+                       "label": "H" },
+
+    # ── Classical Ranged ──────────────────────────────────────────────────────
+    "catapult":      { "type": "ranged", "strength": 5, "ranged_strength": 8, "range": 2,
+                       "moves": 2, "hp_max": 100, "prod_cost": 100,
+                       "requires_tech": "mathematics", "requires_resource": None,
+                       "bonus_vs_city": 2.0,            # +200% vs cities
+                       "label": "Ca" },
+
+    # ── Medieval Melee ────────────────────────────────────────────────────────
+    "pikeman":       { "type": "melee", "strength": 16,
+                       "moves": 2, "hp_max": 100, "prod_cost": 90,
+                       "requires_tech": "feudalism", "requires_resource": None,
+                       "bonus_vs": {"horseman": 1.5, "knight": 1.5},  # +150% vs cavalry
+                       "label": "Pi" },
+    "longswordsman": { "type": "melee", "strength": 21,
+                       "moves": 2, "hp_max": 100, "prod_cost": 100,
+                       "requires_tech": "steel", "requires_resource": "iron",
+                       "label": "Ls" },
+    "knight":        { "type": "melee", "strength": 20,
+                       "moves": 4, "hp_max": 100, "prod_cost": 120,
+                       "requires_tech": "steel", "requires_resource": "horses",
+                       "label": "Kn" },
+
+    # ── Medieval Ranged ───────────────────────────────────────────────────────
+    "crossbowman":   { "type": "ranged", "strength": 12, "ranged_strength": 18, "range": 2,
+                       "moves": 2, "hp_max": 100, "prod_cost": 90,
+                       "requires_tech": "machinery", "requires_resource": None,
+                       "label": "Xb" },
+    "trebuchet":     { "type": "ranged", "strength": 13, "ranged_strength": 14, "range": 2,
+                       "moves": 2, "hp_max": 100, "prod_cost": 120,
+                       "requires_tech": "machinery", "requires_resource": None,
+                       "bonus_vs_city": 2.5,            # +250% vs cities
+                       "label": "Tr" },
 }
 ```
 
@@ -393,24 +437,43 @@ File: `data/buildings.py`
 
 ```python
 BUILDING_DEFS = {
-    "palace":   { "prod_cost": 0,   "requires_tech": None,
-                  "effects": {"prod_per_turn": 3, "gold_per_turn": 3, "culture_per_turn": 2},
-                  "maintenance": 0 },
-    "monument": { "prod_cost": 60,  "requires_tech": None,
-                  "effects": {"culture_per_turn": 2},
-                  "maintenance": 0 },
-    "granary":  { "prod_cost": 80,  "requires_tech": "pottery",
-                  "effects": {"food_per_turn": 2},
-                  "maintenance": 1 },
-    "library":  { "prod_cost": 100, "requires_tech": "writing",
-                  "effects": {"science_per_turn": 2},
-                  "maintenance": 1 },
-    "market":   { "prod_cost": 100, "requires_tech": "currency",
-                  "effects": {"gold_per_turn": 2},
-                  "maintenance": 0 },
-    "forge":    { "prod_cost": 120, "requires_tech": "iron_working",
-                  "effects": {"prod_bonus_hills": 1},  # +1 prod per hills tile worked
-                  "maintenance": 1 },
+    # ── Always Available ──────────────────────────────────────────────────────
+    "palace":     { "prod_cost": 0,   "requires_tech": None,
+                    "effects": {"prod_per_turn": 3, "gold_per_turn": 3, "culture_per_turn": 2},
+                    "maintenance": 0 },
+    "monument":   { "prod_cost": 60,  "requires_tech": None,
+                    "effects": {"culture_per_turn": 2},
+                    "maintenance": 0 },
+
+    # ── Ancient Era ───────────────────────────────────────────────────────────
+    "granary":    { "prod_cost": 80,  "requires_tech": "pottery",
+                    "effects": {"food_per_turn": 2},
+                    "maintenance": 1 },
+
+    # ── Classical Era ─────────────────────────────────────────────────────────
+    "library":    { "prod_cost": 100, "requires_tech": "writing",
+                    "effects": {"science_per_turn": 2},
+                    "maintenance": 1 },
+    "market":     { "prod_cost": 100, "requires_tech": "currency",
+                    "effects": {"gold_per_turn": 2},
+                    "maintenance": 0 },
+    "forge":      { "prod_cost": 120, "requires_tech": "iron_working",
+                    "effects": {"prod_bonus_hills": 1},  # +1 prod per hills tile worked
+                    "maintenance": 1 },
+
+    # ── Medieval Era ──────────────────────────────────────────────────────────
+    "castle":     { "prod_cost": 130, "requires_tech": "feudalism",
+                    "effects": {"gold_per_turn": 1, "culture_per_turn": 3},
+                    "maintenance": 2 },
+    "cathedral":  { "prod_cost": 120, "requires_tech": "theology",
+                    "effects": {"culture_per_turn": 4, "food_per_turn": 1},
+                    "maintenance": 2 },
+    "university": { "prod_cost": 160, "requires_tech": "education",
+                    "effects": {"science_per_turn": 4},
+                    "maintenance": 2 },
+    "bank":       { "prod_cost": 140, "requires_tech": "civil_service",
+                    "effects": {"gold_per_turn": 3},
+                    "maintenance": 0 },
 }
 ```
 
@@ -444,21 +507,42 @@ IMPROVEMENT_DEFS = {
 File: `data/techs.py`
 
 ```
-ANCIENT ERA                         CLASSICAL ERA
-──────────────────────────────────────────────────────────────
-Mining ──────────► Bronze Working ──────────► Iron Working
-                                              (Swordsman, Forge)
-Animal Husbandry ───────────────────────────► Horseback Riding
-                                              (Horseman)
-Archery
-Pottery ─────────────────────────────────► Writing ──► Mathematics
-                                                    └──► Currency
+ANCIENT ERA                          CLASSICAL ERA                        MEDIEVAL ERA
+─────────────────────────────────────────────────────────────────────────────────────────────
+Mining ──────────► Bronze Working ──► Iron Working ──► Feudalism (Pikeman, Castle)
+                                   └──────────────────► Steel    (Longswordsman, Knight)
+
+Animal Husbandry ───────────────────► Horseback Riding (Horseman)
+
+Archery ─────────────────────────────────────────────────────────────────┐
+                                                                          ▼
+Pottery ─────────────────────────► Writing ──► Mathematics (Catapult) ───► Machinery (Crossbowman, Trebuchet)
+                                           └──► Currency  (Market) ──────► Civil Service (Bank)
+                                           └──► Theology  (Cathedral) ───► Education (University)
 ```
 
-Science costs: Mining/Animal Husbandry/Archery/Pottery = 35, Bronze Working = 55,
-Iron Working/Horseback Riding/Writing = 80, Mathematics/Currency = 100.
+**Science costs:**
 
-Each tech has: `era`, `science_cost`, `prerequisites`, `unlocks_units`,
+| Era      | Tech                | Cost | Prerequisites             |
+|----------|---------------------|------|---------------------------|
+| Ancient  | Mining              | 35   | —                         |
+| Ancient  | Animal Husbandry    | 35   | —                         |
+| Ancient  | Archery             | 35   | —                         |
+| Ancient  | Pottery             | 35   | —                         |
+| Ancient  | Bronze Working      | 55   | Mining                    |
+| Classical| Iron Working        | 80   | Bronze Working            |
+| Classical| Horseback Riding    | 80   | Animal Husbandry          |
+| Classical| Writing             | 80   | Pottery                   |
+| Classical| Mathematics         | 100  | Writing + Archery         |
+| Classical| Currency            | 100  | Writing                   |
+| Medieval | Feudalism           | 130  | Iron Working              |
+| Medieval | Steel               | 150  | Iron Working              |
+| Medieval | Machinery           | 150  | Mathematics               |
+| Medieval | Theology            | 130  | Writing                   |
+| Medieval | Civil Service       | 160  | Currency                  |
+| Medieval | Education           | 175  | Theology                  |
+
+Each tech entry has: `era`, `science_cost`, `prerequisites`, `unlocks_units`,
 `unlocks_buildings`, `unlocks_improvements`, `reveals_resources`.
 
 Research flow:
@@ -491,7 +575,7 @@ for each building in city.buildings:
 
 # Base science (always applied)
 totals["science"] += 1 + city.population
-# Science per city = 1 (base) + population + 2 (Library) = up to pop+3 with Library
+# Science per city = 1 (base) + population + library/university bonuses
 ```
 
 ---
@@ -510,7 +594,7 @@ def effective_strength(unit, tile, vs_unit_type=None) -> float:
     terrain_bonus = TERRAIN_DEFENSE_BONUS[tile.terrain]     # 0 or 0.25
     fortify_bonus = unit.fortify_bonus                       # 0.0 / 0.25 / 0.5
     hp_modifier   = 0.5 + 0.5 * (unit.hp / hp_max)         # 0.5 → 1.0
-    unit_bonus    = bonus_vs.get(vs_unit_type, 0.0)         # e.g. Spearman vs Horseman
+    unit_bonus    = bonus_vs.get(vs_unit_type, 0.0)         # e.g. Pikeman vs Knight
     return base * (1 + terrain_bonus + fortify_bonus + unit_bonus) * hp_modifier
 
 def melee_attack(attacker, defender, attacker_tile, defender_tile):
@@ -527,7 +611,7 @@ def ranged_attack(attacker, defender, defender_tile):
 
 def bombard_city(attacker, city):
     a_str = ranged_strength (or strength)
-    # bonus_vs_city multiplier applied if defined (Catapult: 2.0 → 3× city damage)
+    # bonus_vs_city multiplier applied if defined
     dmg = max(1, min(20, int(a_str * 0.4)))
     city.hp -= dmg
 ```
@@ -535,6 +619,8 @@ def bombard_city(attacker, city):
 **City capture**: melee unit defeats last defender (or attacks undefended city to 0 HP)
 → attacker moves in, city transfers owner, all territory tiles within radius 3 transfer.
 If old owner loses all cities → eliminated (all units removed, skipped in turn order).
+
+**Turn 1 protection**: settlers cannot be attacked or captured on turn 1.
 
 ---
 
@@ -549,16 +635,16 @@ def get_reachable_tiles(unit, tiles, turn=99) -> dict {(q,r): cost}
 BFS. Entry cost = `TERRAIN_MOVE_COST[terrain]`.
 
 **Civilian rules** (Settler, Worker):
-- Blocked by **any** civilian on destination tile (own or enemy)
+- Blocked by **any** civilian on destination tile (own or enemy — no stacking)
 - Blocked by enemy military
-- On turn 1: also blocked by tiles containing any enemy settler
+- Can move through own military tiles
 
 **Military rules** (Warrior, Spearman, etc.):
 - Blocked by friendly military
 - Enemy military tile: attackable (shown red), not in reachable set
 - Enemy undefended city: BFS passes through but cannot end there
 - Enemy civilian tile: reachable (captures civilian on move), cannot pass through
-- On turn 1: tiles with enemy settlers are impassable
+- On turn 1: tiles with enemy settlers are impassable (cannot capture settlers on turn 1)
 
 ```python
 def get_attackable_tiles(unit, tiles) -> set {(q,r)}
@@ -614,7 +700,7 @@ for each city:
         complete item; progress -= cost
         pending_messages.append("{city}: {item} built/trained!")
 
-# Unit reset
+# Unit reset + healing
 for each unit:
     if healing:
         heal_amount = 20 if tile.owner == civ.player_index else 10
@@ -652,9 +738,11 @@ When a player presses Enter or clicks END TURN (`_do_end_turn` in `main.py`):
 ```
 Per-turn gold (net) =
     Σ cities:
-        terrain gold yields
-      + building gold bonuses (Palace +3, Market +2)
-      − building maintenance (Granary −1, Library −1, Forge −1)
+        terrain gold yields (from worked tiles)
+      + resource gold bonuses (gold +3, silver +2, diamonds +4)
+      + building gold bonuses (palace +3, market +2, castle +1, bank +3)
+      − building maintenance (granary −1, library −1, forge −1, castle −2,
+                              cathedral −2, university −2)
     − 1 per military unit
 
 If gold ends turn negative:
@@ -682,9 +770,9 @@ class Camera:
     offset_x, offset_y: float   # pan offset in pixels
     zoom: int                    # 1 = full size (HEX_SIZE=72), 0 = 60% (≈43px)
 
-    effective_hex_size() -> int
-    pan(dx, dy)                  # move + clamp to map bounds (80px margin)
-    center_on_pixel(px, py)      # snap camera to pixel + clamp
+    effective_hex_size() -> int   # returns 72 (zoom=1) or int(72*0.6)=43 (zoom=0)
+    pan(dx, dy)                   # move + clamp to map bounds (80px margin)
+    center_on_pixel(px, py)       # snap camera to pixel + clamp
 ```
 
 Auto-centers on the new player's original capital at each turn handoff.
@@ -720,6 +808,43 @@ If the player has no capital yet, centers on their settler.
 | Scroll up    | Zoom in  (or scroll city list up when city screen open) |
 | Scroll down  | Zoom out (or scroll city list down when city screen open) |
 
+Any key press or click dismisses the turn banner immediately.
+
+---
+
+## Assets
+
+Files in `civ_game/assets/`:
+
+**Terrain images** (PNG, loaded on demand, masked to hex shape):
+
+| File                    | Terrain    |
+|-------------------------|------------|
+| terrain-grassland.png   | grassland  |
+| terrain-plains.png      | plains     |
+| terrain-forest.png      | forest     |
+| terrain-hills.png       | hills      |
+| terrain-ocean.png       | ocean      |
+
+Each image is scaled to the hex bounding box (`⌈√3 × hs⌉ × 2hs` pixels) and masked
+to the hex polygon using `BLEND_RGBA_MULT`. Cached per `(terrain, hex_size)`.
+Terrain types without images fall back to `TERRAIN_COLORS` solid polygon fill.
+
+**Resource icons** (PNG, scaled dynamically):
+
+| File                  | Resource |
+|-----------------------|----------|
+| resource-Gold.png     | gold     |
+| resource-Silver.png   | silver   |
+| resource-Iron.png     | iron     |
+| resource-Horses.png   | horses   |
+| resource-Diamonds.png | diamonds |
+
+Icon size scales with zoom: `max(20, round(20 × hs / 43))` — approximately **20×20**
+at zoom-out (`hs=43`) and **34×34** at full zoom (`hs=72`). Raw images cached once;
+scaled versions cached per `(resource, size)`. Fall back to `RESOURCE_COLORS` dot
+if image missing.
+
 ---
 
 ## Rendering Layers
@@ -727,32 +852,34 @@ If the player has no capital yet, centers on their settler.
 File: `ui/renderer.py` — `render(screen, game, camera, ui_state)`
 
 ```
-Layer  1 — Background fill (dark blue)
-Layer  2 — Terrain hexes (filled polygons + black border)
-Layer  3 — Territory border lines (player color on edges where owner changes)
-Layer  4 — Resources (colored dot, only if revealed to current player)
-Layer  5 — Improvement labels ("f", "m", "p" in yellow)
-Layer  6 — Movement/attack overlays
+Layer  1 — Terrain
+             textured hex image (grassland/plains/forest/hills/ocean)
+             fallback: solid color polygon
+             + black hex border outline always drawn on top
+Layer  2 — Territory border lines (player color on edges where owner changes)
+Layer  3 — Resources (icon or colored dot, only if revealed to current player)
+Layer  4 — Improvement labels ("f", "m", "p" in yellow)
+Layer  5 — Movement/attack overlays
              yellow fill + border = reachable tiles
              red fill + border    = attackable tiles
-Layer  7 — Cities
+Layer  6 — Cities
              colored circle, name above, population inside
              gold ring if original capital
              HP bar if damaged
-Layer  8 — Units
+Layer  7 — Units
              colored circle, label text
              civilian: offset (+x, +y) to avoid overlap with military
              blue ring = fortified, green ring = healing
              dim overlay if no moves left (current player only)
              "[N]" counter if building improvement
              HP bar if damaged
-Layer  9 — Selection ring (yellow hex outline on selected tile/unit)
-Layer 10 — HUD (bottom info bar)
-Layer 11 — Tech screen modal (if open)
-Layer 12 — City screen modal (if open)
-Layer 13 — Notification popup (multi-line, semi-transparent, auto-dismiss 3 sec)
-Layer 14 — Turn banner (hotseat handoff, dismissible by click/key)
-Layer 15 — Win screen (domination victory overlay, blocks all input)
+Layer  8 — Selection ring (yellow hex outline on selected tile/unit)
+Layer  9 — HUD (bottom info bar)
+Layer 10 — Tech screen modal (if open)
+Layer 11 — City screen modal (if open)
+Layer 12 — Notification popup (multi-line, semi-transparent, auto-dismiss 3 sec)
+Layer 13 — Turn banner (hotseat handoff, dismissible by click/key, 120 frames)
+Layer 14 — Win screen (domination victory overlay, blocks all input)
 ```
 
 ---
@@ -767,11 +894,13 @@ Left half                                  Right half
 [Unit: name, HP, moves, strength]          Turn N
 [City: name, pop, food stored, yields]     Player X  (in player color)
 [Tile: terrain, resource, yields]          Gold: 12   Sci: 45/80   Mining
-[Context hints]                            [control hints]
+[Context hints: F/A/M/P/K/H shortcuts]    [control hints]
                                                        [END TURN]
 ```
 
-END TURN button: `(SCREEN_W − 220, SCREEN_H − 66, 200 × 48)`.
+- If a unit is selected and in own territory, the heal hint shows exact HP gain (20)
+- If in enemy/neutral territory, the heal hint shows 10
+- END TURN button: `(SCREEN_W − 220, SCREEN_H − 66, 200 × 48)`
 
 ---
 
@@ -784,11 +913,11 @@ Contents (top to bottom):
 2. Yields row: Food / Prod / Gold / Sci / Culture
 3. Food progress: stored/threshold, net/turn, turns to grow
 4. Production section: current item progress bar + turns remaining (or "nothing queued")
-5. Buildings list (all built buildings except palace)
+5. Buildings list (all built buildings)
 6. Scrollable build list: available units and buildings
    - Filtered by tech requirements and resource availability
    - Shows prod cost and turns to build at current yield
-   - Click to enqueue (or dequeue if already queued)
+   - Click to enqueue at position 0 (starts immediately)
 7. Scrollbar on right edge (if list overflows)
 8. Close button (bottom-right)
 
@@ -798,8 +927,8 @@ Scroll with mouse wheel when city screen is open.
 
 ## Tech Screen
 
-Full-screen semi-transparent overlay. Tech nodes as rounded rectangles, arranged
-in two era columns with prerequisite arrows between them.
+Full-screen semi-transparent overlay (`1600 × 720 px` panel at offset `125, 40`).
+Tech nodes: `200 × 54 px` rounded rectangles.
 
 Node states:
 - **Green fill** — already researched
@@ -807,8 +936,32 @@ Node states:
 - **White/light** — prerequisites met, available to choose
 - **Dark grey** — locked (prerequisites not met)
 
-Click a node to set it as `current_research`. Click outside panel or press Escape
+Click a node to set it as `current_research`. Click outside panel or press Escape/T
 to close. Prerequisite arrows colored by research state.
+
+**Node positions** (relative to panel origin):
+
+| Tech             | Position (x, y) | Era       |
+|------------------|-----------------|-----------|
+| mining           | (80, 120)       | Ancient   |
+| animal_husbandry | (80, 250)       | Ancient   |
+| archery          | (80, 380)       | Ancient   |
+| pottery          | (80, 505)       | Ancient   |
+| bronze_working   | (360, 183)      | Ancient   |
+| iron_working     | (640, 120)      | Classical |
+| horseback_riding | (640, 250)      | Classical |
+| writing          | (640, 460)      | Classical |
+| mathematics      | (920, 393)      | Classical |
+| currency         | (920, 520)      | Classical |
+| feudalism        | (1140, 90)      | Medieval  |
+| steel            | (1140, 200)     | Medieval  |
+| machinery        | (1140, 330)     | Medieval  |
+| theology         | (1140, 440)     | Medieval  |
+| civil_service    | (1140, 570)     | Medieval  |
+| education        | (1360, 440)     | Medieval  |
+
+Era labels: "-- ANCIENT ERA --" at `(80, 80)`, "-- CLASSICAL ERA --" at `(590, 80)`,
+"-- MEDIEVAL ERA --" at `(1100, 50)` — all relative to panel origin.
 
 ---
 
