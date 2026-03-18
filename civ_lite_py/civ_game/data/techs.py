@@ -8,7 +8,7 @@ TECH_DEFS = {
         "unlocks_units": [],
         "unlocks_buildings": [],
         "unlocks_improvements": ["mine"],
-        "reveals_resources": ["iron", "silver"],
+        "reveals_resources": ["iron"],
     },
     "animal_husbandry": {
         "name": "Animal Husbandry",

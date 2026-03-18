@@ -67,7 +67,7 @@ RESOURCES = {
         "type": "luxury",
         "valid_terrain": ["hills"],
         "yield_bonus": {"gold": 2},
-        "requires_tech": "mining",
+        "requires_tech": None,
     },
     "diamonds": {
         "type": "luxury",

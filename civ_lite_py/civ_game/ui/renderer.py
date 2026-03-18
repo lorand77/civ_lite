@@ -1,3 +1,5 @@
+import math
+import os
 import pygame
 from civ_game.map.hex_grid import hex_to_pixel, hex_corners, HEX_DIRECTIONS
 from civ_game.map.terrain import TERRAIN_COLORS, RESOURCE_COLORS
@@ -7,6 +9,109 @@ from civ_game.map.terrain import RESOURCES
 from civ_game.ui.hud import render_hud
 from civ_game.ui.city_screen import render_city_screen, set_tiles
 from civ_game.ui.tech_screen import render_tech_screen
+
+_ASSETS_DIR = os.path.join(os.path.dirname(__file__), "..", "assets")
+
+_TERRAIN_IMAGE_FILES = {
+    "grassland": "terrain-grassland.png",
+    "plains":    "terrain-plains.png",
+    "forest":    "terrain-forest.png",
+    "hills":     "terrain-hills.png",
+    "ocean":     "terrain-ocean.png",
+}
+
+_raw_images: dict = {}          # terrain -> raw Surface
+_hex_surface_cache: dict = {}   # (terrain, hs) -> masked SRCALPHA Surface
+
+_RESOURCE_IMAGE_FILES = {
+    "gold":     "resource-Gold.png",
+    "silver":   "resource-Silver.png",
+    "iron":     "resource-Iron.png",
+    "horses":   "resource-Horses.png",
+    "diamonds": "resource-Diamonds.png",
+}
+
+_resource_raw: dict = {}    # resource -> raw Surface (loaded once)
+_resource_icons: dict = {}  # (resource, size) -> scaled Surface
+
+
+def _get_resource_icon(resource: str, hs: int):
+    """Return a resource icon scaled proportionally to hs (20px at hs=43)."""
+    size = max(20, round(20 * hs / 43))
+    key = (resource, size)
+    if key in _resource_icons:
+        return _resource_icons[key]
+
+    if resource not in _resource_raw:
+        fname = _RESOURCE_IMAGE_FILES.get(resource)
+        if not fname:
+            _resource_raw[resource] = None
+        else:
+            path = os.path.join(_ASSETS_DIR, fname)
+            try:
+                _resource_raw[resource] = pygame.image.load(path).convert_alpha()
+            except Exception:
+                _resource_raw[resource] = None
+
+    raw = _resource_raw.get(resource)
+    if raw is None:
+        _resource_icons[key] = None
+        return None
+
+    _resource_icons[key] = pygame.transform.scale(raw, (size, size))
+    return _resource_icons[key]
+
+
+def _get_terrain_surface(terrain: str, hs: int):
+    """Return a hex-masked terrain image surface, or None if no image exists."""
+    key = (terrain, hs)
+    if key in _hex_surface_cache:
+        return _hex_surface_cache[key]
+
+    fname = _TERRAIN_IMAGE_FILES.get(terrain)
+    if not fname:
+        _hex_surface_cache[key] = None
+        return None
+
+    if terrain not in _raw_images:
+        path = os.path.join(_ASSETS_DIR, fname)
+        try:
+            _raw_images[terrain] = pygame.image.load(path).convert_alpha()
+        except Exception:
+            _raw_images[terrain] = None
+
+    raw = _raw_images.get(terrain)
+    if raw is None:
+        _hex_surface_cache[key] = None
+        return None
+
+    # Bounding box for this hex size
+    bw = math.ceil(math.sqrt(3) * hs)
+    bh = 2 * hs
+
+    scaled = pygame.transform.scale(raw, (bw, bh))
+
+    # Hex corners relative to bounding box center
+    cx_local = bw / 2
+    cy_local = bh / 2
+    local_corners = [
+        (cx_local + hs * math.cos(math.radians(60 * i - 30)),
+         cy_local + hs * math.sin(math.radians(60 * i - 30)))
+        for i in range(6)
+    ]
+
+    # Draw image, then punch out a hex-shaped alpha mask
+    surf = pygame.Surface((bw, bh), pygame.SRCALPHA)
+    surf.blit(scaled, (0, 0))
+
+    mask = pygame.Surface((bw, bh), pygame.SRCALPHA)
+    mask.fill((0, 0, 0, 0))
+    pygame.draw.polygon(mask, (255, 255, 255, 255), local_corners)
+
+    surf.blit(mask, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+
+    _hex_surface_cache[key] = surf
+    return surf
 
 SCREEN_W = 1850
 SCREEN_H = 1000
@@ -60,7 +165,12 @@ def render(screen, game, camera, ui_state):
         cx, cy = hex_to_pixel(q, r, ox, oy, hs)
         if not _on_screen(cx, cy, hs):
             continue
-        pygame.draw.polygon(screen, TERRAIN_COLORS[tile.terrain], hex_corners(cx, cy, hs))
+        terrain_surf = _get_terrain_surface(tile.terrain, hs)
+        if terrain_surf:
+            bw, bh = terrain_surf.get_size()
+            screen.blit(terrain_surf, (cx - bw // 2, cy - bh // 2))
+        else:
+            pygame.draw.polygon(screen, TERRAIN_COLORS[tile.terrain], hex_corners(cx, cy, hs))
         pygame.draw.polygon(screen, COLOR_HEX_BORDER, hex_corners(cx, cy, hs), 1)
 
     # --- Layer 2b: Territory border lines ---
@@ -95,11 +205,16 @@ def render(screen, game, camera, ui_state):
         cx, cy = hex_to_pixel(q, r, ox, oy, hs)
         if not _on_screen(cx, cy, hs):
             continue
-        dot_color = RESOURCE_COLORS[tile.resource]
-        dr = max(3, hs // 7)
         dx, dy = int(cx + hs * 0.28), int(cy - hs * 0.28)
-        pygame.draw.circle(screen, dot_color, (dx, dy), dr)
-        pygame.draw.circle(screen, (0, 0, 0), (dx, dy), dr, 1)
+        icon = _get_resource_icon(tile.resource, hs)
+        if icon:
+            half = icon.get_width() // 2
+            screen.blit(icon, (dx - half, dy - half))
+        else:
+            dot_color = RESOURCE_COLORS[tile.resource]
+            dr = max(3, hs // 7)
+            pygame.draw.circle(screen, dot_color, (dx, dy), dr)
+            pygame.draw.circle(screen, (0, 0, 0), (dx, dy), dr, 1)
 
     # --- Layer 4: Improvement labels ---
     for (q, r), tile in game.tiles.items():
