@@ -263,6 +263,14 @@ def _handle_key(key, game, ui_state):
             ui_state.reachable_tiles = {}
             ui_state.attackable_tiles = set()
 
+    elif key == pygame.K_u and unit and not unit.is_civilian:
+        ok, msg = game.upgrade_unit(unit)
+        if msg:
+            ui_state.set_message(msg)
+        if ok:
+            ui_state.reachable_tiles = {}
+            ui_state.attackable_tiles = set()
+
 
 def main():
     pygame.init()

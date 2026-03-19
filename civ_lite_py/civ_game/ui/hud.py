@@ -34,6 +34,7 @@ class UIState:
 
     city_screen_open: bool = False
     city_screen_item_rects: list = field(default_factory=list)
+    city_screen_buy_rects: list = field(default_factory=list)
     city_screen_close_rect: object = None
     city_screen_scroll: int = 0
 
@@ -173,10 +174,29 @@ def _draw_unit_info(screen, unit, game, lx, base_y, lh):
         screen.blit(_font(20).render("Build:  " + "  ".join(hints) if hints else "No improvements available",
                                      True, COLOR_TEXT_DIM), (lx, base_y + lh * 2))
     elif defn["type"] in ("melee", "ranged"):
+        from civ_game.data.units import UNIT_UPGRADES, UNIT_DEFS
         tile = game.tiles.get((unit.q, unit.r))
         in_own = tile and tile.owner == unit.owner
         hp_rate = 20 if in_own else 10
-        hint = f"Click red=attack  K=fortify  H=heal (+{hp_rate} HP/turn)"
+
+        upg_hint = ""
+        path = UNIT_UPGRADES.get(unit.unit_type)
+        if path and unit.moves_left > 0:
+            target_type, gold_cost = path
+            tdef = UNIT_DEFS[target_type]
+            civ = game.civs[unit.owner]
+            req_tech = tdef.get("requires_tech")
+            req_res  = tdef.get("requires_resource")
+            tech_ok  = not req_tech or req_tech in civ.techs_researched
+            res_ok   = not req_res or any(
+                t.resource == req_res and t.owner == unit.owner
+                for t in game.tiles.values()
+            )
+            gold_ok  = civ.gold >= gold_cost
+            if tech_ok and res_ok and gold_ok:
+                upg_hint = f"  U=Upgrade->{tdef['name']}({gold_cost}g)"
+
+        hint = f"Click red=attack  K=fortify  H=heal (+{hp_rate} HP/turn){upg_hint}"
         screen.blit(_font(20).render(hint, True, (255, 160, 80)),
                     (lx, base_y + lh * 2))
 

@@ -32,6 +32,11 @@ def process_production(city, civ, game):
     return None
 
 
+def complete_item(city, civ, game, item_key) -> str:
+    """Public entry point for the buy mechanic."""
+    return _complete_item(city, civ, game, item_key)
+
+
 def _complete_item(city, civ, game, item_key):
     if item_key in BUILDING_DEFS:
         if item_key not in city.buildings:

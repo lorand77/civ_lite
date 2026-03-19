@@ -74,3 +74,13 @@ UNIT_DEFS = {
         "bonus_vs_city": 2.5,
     },
 }
+
+# Each entry: from_unit -> (to_unit, gold_cost)
+UNIT_UPGRADES = {
+    "warrior":   ("swordsman",     60),
+    "spearman":  ("pikeman",       60),
+    "swordsman": ("longswordsman", 50),
+    "archer":    ("crossbowman",   70),
+    "horseman":  ("knight",        60),
+    "catapult":  ("trebuchet",     40),
+}

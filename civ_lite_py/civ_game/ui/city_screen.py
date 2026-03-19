@@ -24,6 +24,8 @@ COLOR_BUILD   = (50, 80, 50)
 COLOR_BUILD_H = (70, 110, 70)
 COLOR_CLOSE   = (90, 40, 40)
 COLOR_CLOSE_H = (130, 60, 60)
+COLOR_BUY     = (100, 80, 20)
+COLOR_BUY_H   = (150, 120, 30)
 
 _font_cache: dict = {}
 
@@ -161,15 +163,25 @@ def render_city_screen(screen, city, civ, ui_state):
 
     mouse = pygame.mouse.get_pos()
     ui_state.city_screen_item_rects = []
+    ui_state.city_screen_buy_rects = []
     item_rect_w = MODAL_W - 28 - SCROLL_W - 6
+    BUY_BTN_W = 88
 
     for i, (key, label) in enumerate(all_items[scroll: scroll + visible_count]):
         item_y = list_top + i * ITEM_H
-        rect = pygame.Rect(lx, item_y, item_rect_w, 28)
+        rect = pygame.Rect(lx, item_y, item_rect_w - BUY_BTN_W - 6, 28)
         color = COLOR_BUILD_H if rect.collidepoint(mouse) else COLOR_BUILD
         pygame.draw.rect(screen, color, rect, border_radius=3)
         screen.blit(_font(20).render(label, True, COLOR_TEXT), (lx + 4, item_y + 4))
         ui_state.city_screen_item_rects.append((rect, key))
+
+        gold_cost = _item_cost(key) * 2
+        buy_rect = pygame.Rect(lx + item_rect_w - BUY_BTN_W, item_y, BUY_BTN_W, 28)
+        buy_color = COLOR_BUY_H if buy_rect.collidepoint(mouse) else COLOR_BUY
+        pygame.draw.rect(screen, buy_color, buy_rect, border_radius=3)
+        buy_surf = _font(19).render(f"Buy {gold_cost}g", True, (255, 220, 80))
+        screen.blit(buy_surf, buy_surf.get_rect(center=buy_rect.center))
+        ui_state.city_screen_buy_rects.append((buy_rect, key))
 
     screen.set_clip(None)
 
@@ -227,6 +239,16 @@ def handle_city_screen_click(pos, ui_state, game):
     if ui_state.city_screen_close_rect and ui_state.city_screen_close_rect.collidepoint(pos):
         ui_state.city_screen_open = False
         return True
+
+    # Buy button (check before queue button)
+    for rect, key in ui_state.city_screen_buy_rects:
+        if rect.collidepoint(pos):
+            city = ui_state.selected_city
+            if city:
+                ok, msg = game.buy_item(city, key)
+                if msg:
+                    ui_state.set_message(msg)
+            return True
 
     # Build item
     for rect, key in ui_state.city_screen_item_rects:

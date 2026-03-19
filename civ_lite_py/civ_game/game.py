@@ -278,6 +278,73 @@ class Game:
         auto_assign_worked_tiles(city, self.tiles)
         return city
 
+    def upgrade_unit(self, unit) -> tuple[bool, str]:
+        from civ_game.data.units import UNIT_DEFS, UNIT_UPGRADES
+        if unit.is_civilian:
+            return False, ""
+        if unit.moves_left == 0:
+            return False, "No moves left to upgrade."
+        civ = self.civs[unit.owner]
+        path = UNIT_UPGRADES.get(unit.unit_type)
+        if not path:
+            return False, f"{UNIT_DEFS[unit.unit_type]['name']} has no upgrade."
+        target_type, gold_cost = path
+        tdef = UNIT_DEFS[target_type]
+        req_tech = tdef.get("requires_tech")
+        if req_tech and req_tech not in civ.techs_researched:
+            return False, f"Requires {req_tech} technology."
+        req_res = tdef.get("requires_resource")
+        if req_res and not any(t.resource == req_res and t.owner == unit.owner
+                               for t in self.tiles.values()):
+            return False, f"Requires {req_res} resource."
+        if civ.gold < gold_cost:
+            return False, f"Need {gold_cost}g to upgrade (have {civ.gold}g)."
+        # Apply upgrade
+        civ.gold -= gold_cost
+        old_def = UNIT_DEFS[unit.unit_type]
+        hp_ratio = unit.hp / old_def["hp_max"]
+        unit.unit_type  = target_type
+        unit.hp         = max(1, round(hp_ratio * tdef["hp_max"]))
+        unit.moves_left = 0
+        unit.fortified  = False
+        unit.fortify_bonus = 0.0
+        unit.healing    = False
+        return True, f"Upgraded to {tdef['name']} for {gold_cost}g!"
+
+    def buy_item(self, city, item_key: str) -> tuple[bool, str]:
+        from civ_game.data.units import UNIT_DEFS
+        from civ_game.data.buildings import BUILDING_DEFS
+        from civ_game.systems.production import get_item_cost, complete_item
+
+        civ = self.civs[city.owner]
+
+        # Already built?
+        if item_key in BUILDING_DEFS and item_key in city.buildings:
+            return False, f"{BUILDING_DEFS[item_key]['name']} already built."
+
+        # Tech requirement
+        defn = BUILDING_DEFS.get(item_key) or UNIT_DEFS.get(item_key)
+        req_tech = defn.get("requires_tech") if defn else None
+        if req_tech and req_tech not in civ.techs_researched:
+            return False, f"Requires {req_tech} technology."
+
+        # Resource requirement (units only)
+        if item_key in UNIT_DEFS:
+            req_res = UNIT_DEFS[item_key].get("requires_resource")
+            if req_res and not any(
+                t.resource == req_res and t.owner == city.owner
+                for t in self.tiles.values()
+            ):
+                return False, f"Requires {req_res} resource."
+
+        gold_cost = get_item_cost(item_key) * 2
+        if civ.gold < gold_cost:
+            return False, f"Need {gold_cost}g (have {civ.gold}g)."
+
+        civ.gold -= gold_cost
+        msg = complete_item(city, civ, self, item_key)
+        return True, msg
+
     def start_improvement(self, unit: Unit, improvement_key: str):
         """Worker begins building an improvement."""
         from civ_game.entities.improvement import IMPROVEMENT_DEFS
