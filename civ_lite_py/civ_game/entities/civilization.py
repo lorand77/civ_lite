@@ -24,3 +24,4 @@ class Civilization:
     is_eliminated: bool = False
     pending_messages: list = field(default_factory=list)  # shown at start of next turn
     research_just_completed: bool = False  # set when a tech finishes this turn
+    is_cpu: bool = False

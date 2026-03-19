@@ -73,11 +73,21 @@ def _promote_queued_message(ui_state):
 
 def _do_end_turn(game, ui_state):
     from civ_game.map.hex_grid import hex_to_pixel, HEX_SIZE
+    from civ_game.systems.ai import ai_take_turn
+
     game.end_turn()
     ui_state.deselect()
-    ui_state.turn_banner_timer = 120  # 2 seconds at 60 fps
 
-    # Center camera on the new player's capital, or settler if not yet founded
+    # Auto-play all consecutive CPU turns before showing turn banner
+    while (not game.winner
+           and game.current_civ().is_cpu):
+        ai_take_turn(game, game.current_civ())
+        game.end_turn()
+
+    # Now current_player is human (or game is won) — show turn banner
+    ui_state.turn_banner_timer = 120
+
+    # Center camera on the new (human) player's capital, or settler if not yet founded
     new_civ = game.current_civ()
     cap = new_civ.original_capital
     if cap:
@@ -89,8 +99,7 @@ def _do_end_turn(game, ui_state):
             px, py = hex_to_pixel(settler.q, settler.r, hex_size=HEX_SIZE)
             game.camera.center_on_pixel(px, py)
 
-    # Queue start-of-turn messages for the new current player
-    # (tech completions, unit/building completions — all shown after turn banner)
+    # Queue start-of-turn messages (human player only)
     if new_civ.pending_messages:
         ui_state.queued_message = "\n".join(new_civ.pending_messages)
         new_civ.pending_messages.clear()
@@ -278,7 +287,9 @@ def main():
     pygame.display.set_caption("CivPy")
     clock = pygame.time.Clock()
 
-    game = Game(num_players=4, map_cols=32, map_rows=20, seed=None)
+    from civ_game.ui.setup_screen import run_setup_screen
+    cpu_flags = run_setup_screen(screen)
+    game = Game(num_players=4, map_cols=32, map_rows=20, seed=None, cpu_flags=cpu_flags)
     ui_state = UIState()
 
     running = True

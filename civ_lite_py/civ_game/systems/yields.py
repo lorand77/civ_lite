@@ -5,7 +5,7 @@ from civ_game.data.buildings import BUILDING_DEFS
 
 def compute_city_yields(city, tiles, civ):
     """Return dict with food/prod/gold/science/culture totals for a city."""
-    totals = {"food": 0, "prod": 10, "gold": 1000, "science": 0, "culture": 0}
+    totals = {"food": 0, "prod": 0, "gold": 0, "science": 0, "culture": 0}
 
     for (q, r) in city.worked_tiles:
         tile = tiles.get((q, r))

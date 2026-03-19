@@ -63,7 +63,8 @@ class Camera:
 
 
 class Game:
-    def __init__(self, num_players=4, map_cols=MAP_COLS, map_rows=MAP_ROWS, seed=None):
+    def __init__(self, num_players=4, map_cols=MAP_COLS, map_rows=MAP_ROWS, seed=None,
+                 cpu_flags=None):
         self.num_players = num_players
         self.map_cols = map_cols
         self.map_rows = map_rows
@@ -77,6 +78,15 @@ class Game:
 
         self.tiles = generate_map(map_cols, map_rows, seed=seed)
         self.civs = self._create_civs()
+
+        # Apply CPU flags: default = players 1-3 are CPU
+        if cpu_flags is not None:
+            for i, flag in enumerate(cpu_flags[:self.num_players]):
+                self.civs[i].is_cpu = flag
+        else:
+            for i in range(1, self.num_players):
+                self.civs[i].is_cpu = True
+
         self._place_starting_units()
 
         self.pending_messages: list[str] = []  # collected during end_turn
