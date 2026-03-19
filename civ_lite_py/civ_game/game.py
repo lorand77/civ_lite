@@ -101,8 +101,18 @@ class Game:
             ))
         return civs
 
-    def _find_start_tile(self, quadrant: int):
-        """Find a grassland/plains tile in the given quadrant (0-3)."""
+    def _find_start_tile(self, quadrant: int, taken: list, min_dist: int = 5):
+        """Find a grassland/plains tile in the given quadrant (0-3).
+
+        `taken` is a list of (q, r) positions already chosen by other civs.
+        Candidates closer than `min_dist` hexes to any taken position are excluded.
+        Falls back to closest-legal tile if no ideal candidates exist.
+        """
+        from civ_game.map.hex_grid import hex_distance as _hdist
+
+        def far_enough(q, r):
+            return all(_hdist(q, r, tq, tr) >= min_dist for tq, tr in taken)
+
         half_r = self.map_rows // 2
         half_c = self.map_cols // 2
 
@@ -120,11 +130,11 @@ class Game:
             ][quadrant]
             if not in_q:
                 continue
-            if tile.terrain in ("grassland", "plains"):
+            if tile.terrain in ("grassland", "plains") and far_enough(q, r):
                 candidates.append((q, r))
 
         if not candidates:
-            # fallback: any passable tile in quadrant
+            # fallback: any passable tile in quadrant that satisfies distance
             for (q, r), tile in self.tiles.items():
                 col = q + (r - (r & 1)) // 2
                 row = r
@@ -136,7 +146,7 @@ class Game:
                     not in_top and in_left,
                     not in_top and not in_left,
                 ][quadrant]
-                if in_q and TERRAIN_PASSABLE[tile.terrain]:
+                if in_q and TERRAIN_PASSABLE[tile.terrain] and far_enough(q, r):
                     candidates.append((q, r))
 
         if not candidates:
@@ -155,11 +165,13 @@ class Game:
 
     def _place_starting_units(self):
         from civ_game.map.hex_grid import hex_neighbors
+        taken_positions = []
         for i, civ in enumerate(self.civs):
-            pos = self._find_start_tile(i)
+            pos = self._find_start_tile(i, taken_positions)
             if not pos:
                 continue
             q, r = pos
+            taken_positions.append((q, r))
             settler = Unit("settler", i, q, r,
                            hp=UNIT_DEFS["settler"]["hp_max"],
                            moves_left=UNIT_DEFS["settler"]["moves"])
