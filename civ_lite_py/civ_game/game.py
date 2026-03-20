@@ -480,8 +480,31 @@ class Game:
         target_city = target_tile.city
         msg = ""
 
-        if target_unit and target_unit.owner != attacker.owner:
-            # ---- Attack enemy unit ----
+        if target_city and target_city.owner != attacker.owner:
+            # ---- Attack city (always, regardless of garrison) ----
+            if unit_type == "ranged":
+                city_dmg, _ = bombard_city(attacker, target_city)
+                msg = (f"Bombarded {target_city.name}: -{city_dmg} HP "
+                       f"(HP: {target_city.hp}/50)")
+            elif unit_type == "melee":
+                old_owner_idx = target_city.owner
+                city_dmg, a_dmg = bombard_city(attacker, target_city)
+                msg = (f"Attacked {target_city.name}: -{city_dmg} HP "
+                       f"(HP: {target_city.hp}/50), attacker -{a_dmg} HP")
+                if attacker.hp <= 0:
+                    self.remove_unit(attacker)
+                    msg += " (attacker died)"
+                elif target_city.hp <= 0:
+                    # Remove any garrisoning unit before capture
+                    if target_unit and target_unit.owner == old_owner_idx:
+                        self.remove_unit(target_unit)
+                    self._capture_city(attacker, target_city)
+                    msg = f"Captured {target_city.name}!"
+                    if self.civs[old_owner_idx].is_eliminated:
+                        msg += f" {self.civs[old_owner_idx].name} eliminated!"
+
+        elif target_unit and target_unit.owner != attacker.owner:
+            # ---- Attack enemy unit (no city on this tile) ----
             if unit_type == "melee":
                 a_dmg, d_dmg = melee_attack(attacker, target_unit,
                                              attacker_tile, target_tile)
@@ -493,39 +516,12 @@ class Game:
 
             if target_unit.hp <= 0:
                 self.remove_unit(target_unit)
-                target_unit = None
                 if unit_type == "melee" and attacker.hp > 0:
-                    # Advance after combat (only if attacker survived)
-                    if target_city and target_city.owner != attacker.owner:
-                        old_owner_idx = target_city.owner
-                        self._capture_city(attacker, target_city)
-                        msg += f" → {target_city.name} captured!"
-                        if self.civs[old_owner_idx].is_eliminated:
-                            msg += f" {self.civs[old_owner_idx].name} eliminated!"
-                    else:
-                        self._advance_unit(attacker, target_q, target_r)
+                    self._advance_unit(attacker, target_q, target_r)
 
             if attacker.hp <= 0:
                 self.remove_unit(attacker)
                 msg += " (attacker died)"
-
-        elif target_city and target_city.owner != attacker.owner and not target_unit:
-            # ---- Attack undefended city ----
-            if unit_type == "ranged":
-                dmg = bombard_city(attacker, target_city)
-                msg = (f"Bombarded {target_city.name}: -{dmg} HP "
-                       f"(HP: {target_city.hp}/50)")
-            elif unit_type == "melee":
-                old_owner_idx = target_city.owner
-                dmg = bombard_city(attacker, target_city)
-                if target_city.hp <= 0:
-                    self._capture_city(attacker, target_city)
-                    msg = f"Captured {target_city.name}!"
-                    if self.civs[old_owner_idx].is_eliminated:
-                        msg += f" {self.civs[old_owner_idx].name} eliminated!"
-                else:
-                    msg = (f"Attacked {target_city.name}: -{dmg} HP "
-                           f"(HP: {target_city.hp}/50)")
 
         self.check_victory()
         return msg

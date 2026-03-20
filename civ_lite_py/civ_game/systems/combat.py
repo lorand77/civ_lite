@@ -1,5 +1,6 @@
 import math
 from civ_game.data.units import UNIT_DEFS
+from civ_game.data.buildings import BUILDING_DEFS
 from civ_game.map.terrain import TERRAIN_DEFENSE_BONUS
 
 
@@ -19,6 +20,14 @@ def effective_strength(unit, tile, vs_unit_type=None):
     hp_modifier = 0.5 + 0.5 * (unit.hp / hp_max)   # 1.0 at full HP, 0.5 at 0 HP
     unit_bonus = UNIT_DEFS[unit.unit_type].get("bonus_vs", {}).get(vs_unit_type, 0.0)
     return base * (1 + terrain_bonus + fortify_bonus + unit_bonus) * hp_modifier
+
+
+def city_combat_strength(city) -> float:
+    """Fixed city defensive strength: base + population bonus + building defense bonus."""
+    base = 5
+    pop_bonus = city.population * 2
+    building_bonus = sum(BUILDING_DEFS[b].get("defense", 0) for b in city.buildings)
+    return base + pop_bonus + building_bonus
 
 
 def melee_attack(attacker, defender, attacker_tile, defender_tile):
@@ -44,11 +53,22 @@ def ranged_attack(attacker, defender, defender_tile):
 
 
 def bombard_city(attacker, city):
-    """Attack city HP directly (ranged or melee vs undefended city)."""
+    """Attack city HP directly. Returns (city_dmg, attacker_dmg).
+    Melee attackers take retaliation damage from the city; ranged do not."""
     defn = UNIT_DEFS[attacker.unit_type]
     a_str = defn.get("ranged_strength", defn["strength"])
-    city_bonus = defn.get("bonus_vs_city", 0.0)   # e.g. catapult +200%
+    city_bonus = defn.get("bonus_vs_city", 0.0)
     a_str = a_str * (1 + city_bonus)
-    dmg = max(1, min(20, int(a_str * 0.4)))
-    city.hp = max(0, city.hp - dmg)
-    return dmg
+    city_dmg = max(1, min(20, int(a_str * 0.4)))
+    city.hp = max(0, city.hp - city_dmg)
+
+    attacker_dmg = 0
+    if defn["type"] == "melee":
+        c_str = city_combat_strength(city)
+        hp_max = defn["hp_max"]
+        hp_modifier = 0.5 + 0.5 * (attacker.hp / hp_max)
+        a_eff_str = defn["strength"] * hp_modifier
+        attacker_dmg = calc_damage(c_str, a_eff_str)
+        attacker.hp = max(0, attacker.hp - attacker_dmg)
+
+    return city_dmg, attacker_dmg

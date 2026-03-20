@@ -203,12 +203,19 @@ def _act_military_unit(game, civ, unit, roles, attack_target, danger):
         if not tile:
             continue
 
-        target_unit = tile.unit or tile.civilian
         target_city = tile.city
+        target_unit = tile.unit or tile.civilian
 
         score = 0
 
-        if target_unit and target_unit.owner != civ.player_index:
+        if target_city and target_city.owner != civ.player_index:
+            # City is always the target (Option A)
+            score += 30
+            score += (50 - target_city.hp) * 0.5
+            if target_city == attack_target:
+                score += 25
+        elif target_unit and target_unit.owner != civ.player_index:
+            # No city — attack the unit directly
             t_defn = UNIT_DEFS[target_unit.unit_type]
             t_str = t_defn["strength"]
             my_str = defn["strength"]
@@ -217,15 +224,6 @@ def _act_military_unit(game, civ, unit, roles, attack_target, danger):
             score += (my_str - t_str) * 4
             score += (100 - target_unit.hp) * 0.3
             score -= (1.0 - hp_ratio) * 30
-
-            if target_city and target_city.owner != civ.player_index:
-                score += 20
-
-        elif target_city and target_city.owner != civ.player_index and not (tile.unit and tile.unit.owner != civ.player_index):
-            score += 30
-            score += (50 - target_city.hp) * 0.5
-            if target_city == attack_target:
-                score += 25
         else:
             continue  # nothing valid to attack here
 

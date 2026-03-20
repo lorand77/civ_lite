@@ -87,7 +87,7 @@ TECH_DEFS = {
         "science_cost": 100,
         "prerequisites": ["writing", "archery"],
         "unlocks_units": ["catapult"],
-        "unlocks_buildings": [],
+        "unlocks_buildings": ["walls"],
         "unlocks_improvements": [],
         "reveals_resources": [],
     },

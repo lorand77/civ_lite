@@ -24,6 +24,7 @@ END_TURN_RECT = pygame.Rect(SCREEN_W - 220, SCREEN_H - 66, 200, 48)
 
 @dataclass
 class UIState:
+    screen: object = None          # pygame surface, set once in main()
     selected_tile: object = None
     pan_start: tuple | None = None
 

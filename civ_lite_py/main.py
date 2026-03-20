@@ -78,10 +78,23 @@ def _do_end_turn(game, ui_state):
     game.end_turn()
     ui_state.deselect()
 
-    # Auto-play all consecutive CPU turns before showing turn banner
+    # Auto-play all consecutive CPU turns, briefly panning to each civ after its turn
     while (not game.winner
            and game.current_civ().is_cpu):
-        ai_take_turn(game, game.current_civ())
+        cpu_civ = game.current_civ()
+        ai_take_turn(game, cpu_civ)
+
+        # Pan camera to this civ's capital (or first unit if no capital yet)
+        focus = cpu_civ.original_capital
+        if not focus and cpu_civ.units:
+            focus = cpu_civ.units[0]
+        if focus:
+            px, py = hex_to_pixel(focus.q, focus.r, hex_size=HEX_SIZE)
+            game.camera.center_on_pixel(px, py)
+        render(ui_state.screen, game, game.camera, ui_state)
+        pygame.display.flip()
+        pygame.time.wait(500)
+
         game.end_turn()
 
     # Now current_player is human (or game is won) — show turn banner
@@ -290,7 +303,7 @@ def main():
     from civ_game.ui.setup_screen import run_setup_screen
     cpu_flags = run_setup_screen(screen)
     game = Game(num_players=4, map_cols=32, map_rows=20, seed=None, cpu_flags=cpu_flags)
-    ui_state = UIState()
+    ui_state = UIState(screen=screen)
 
     running = True
     while running:

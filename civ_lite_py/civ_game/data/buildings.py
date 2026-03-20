@@ -25,9 +25,16 @@ BUILDING_DEFS = {
         "effects": {"prod_bonus_hills": 1}, "maintenance": 1,
     },
     # Medieval Era
+    "walls": {
+        "name": "Walls", "prod_cost": 80, "requires_tech": "mathematics",
+        "effects": {},
+        "defense": 4,
+        "maintenance": 1,
+    },
     "castle": {
         "name": "Castle", "prod_cost": 130, "requires_tech": "feudalism",
         "effects": {"gold_per_turn": 1, "culture_per_turn": 3},
+        "defense": 6,
         "maintenance": 2,
     },
     "cathedral": {
