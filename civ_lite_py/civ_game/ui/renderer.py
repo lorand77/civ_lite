@@ -364,7 +364,7 @@ def render(screen, game, camera, ui_state):
 
     # --- Layer 15: Win screen ---
     if game.winner is not None:
-        _render_win_screen(screen, game.winner)
+        _render_win_screen(screen, game.winner, ui_state.score_history, game.civs)
 
     pygame.display.flip()
 
@@ -407,7 +407,7 @@ def _render_turn_banner(screen, game):
     screen.blit(sub,   sub.get_rect(center=(cx, cy + title.get_height() // 2 + 10)))
 
 
-def _compute_score(civ, game) -> int:
+def compute_score(civ, game) -> int:
     from civ_game.data.buildings import BUILDING_DEFS
     from civ_game.data.units import UNIT_DEFS as _UD
 
@@ -459,7 +459,7 @@ def _render_scoreboard(screen, game):
 
     # Compute and sort
     entries = sorted(
-        [(civ, _compute_score(civ, game)) for civ in game.civs],
+        [(civ, compute_score(civ, game)) for civ in game.civs],
         key=lambda x: x[1], reverse=True
     )
 
@@ -483,7 +483,69 @@ def _render_scoreboard(screen, game):
 WIN_EXIT_RECT = pygame.Rect(SCREEN_W // 2 - 100, SCREEN_H // 2 + 110, 200, 48)
 
 
-def _render_win_screen(screen, winner):
+def _render_score_graph(screen, score_history, civs):
+    if len(score_history) < 2:
+        return
+
+    graph_w, graph_h = 900, 220
+    graph_x = SCREEN_W // 2 - graph_w // 2
+    graph_y = SCREEN_H // 2 + 175
+    pad_l, pad_r, pad_t, pad_b = 55, 20, 18, 30
+
+    plot_x = graph_x + pad_l
+    plot_y = graph_y + pad_t
+    plot_w = graph_w - pad_l - pad_r
+    plot_h = graph_h - pad_t - pad_b
+
+    # Background
+    bg = pygame.Surface((graph_w, graph_h), pygame.SRCALPHA)
+    bg.fill((10, 10, 20, 220))
+    screen.blit(bg, (graph_x, graph_y))
+    pygame.draw.rect(screen, (70, 70, 100), (graph_x, graph_y, graph_w, graph_h), 1)
+
+    # Title
+    t = _font(18).render("Score History", True, (160, 160, 190))
+    screen.blit(t, (graph_x + pad_l, graph_y + 4))
+
+    max_score = max(s for turn in score_history for s in turn)
+    if max_score == 0:
+        max_score = 1
+    num_turns = len(score_history)
+
+    # Horizontal grid lines + Y labels
+    for i in range(5):
+        gy = plot_y + plot_h - int(plot_h * i / 4)
+        pygame.draw.line(screen, (35, 35, 55), (plot_x, gy), (plot_x + plot_w, gy), 1)
+        lbl = _font(15).render(str(int(max_score * i / 4)), True, (100, 100, 130))
+        screen.blit(lbl, (graph_x + 4, gy - 7))
+
+    # Civ lines
+    for ci, civ in enumerate(civs):
+        points = []
+        for ti, turn_scores in enumerate(score_history):
+            x = plot_x + int(ti * plot_w / max(1, num_turns - 1))
+            y = plot_y + plot_h - int(turn_scores[ci] * plot_h / max_score)
+            points.append((x, y))
+        if len(points) >= 2:
+            pygame.draw.lines(screen, civ.color, False, points, 2)
+
+    # X axis turn labels
+    lbl1 = _font(15).render("Turn 1", True, (100, 100, 130))
+    screen.blit(lbl1, (plot_x, graph_y + graph_h - pad_b + 6))
+    lbln = _font(15).render(f"Turn {num_turns}", True, (100, 100, 130))
+    screen.blit(lbln, (plot_x + plot_w - lbln.get_width(), graph_y + graph_h - pad_b + 6))
+
+    # Legend (bottom-right inside graph)
+    lx = plot_x + plot_w - 160
+    ly = plot_y + 2
+    for ci, civ in enumerate(civs):
+        col = (80, 80, 80) if civ.is_eliminated else civ.color
+        pygame.draw.rect(screen, col, (lx, ly + ci * 20, 10, 10))
+        name_surf = _font(15).render(civ.name, True, col)
+        screen.blit(name_surf, (lx + 14, ly + ci * 20 - 1))
+
+
+def _render_win_screen(screen, winner, score_history, civs):
     from civ_game.game import PLAYER_NAMES, PLAYER_COLORS
 
     overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
@@ -508,3 +570,6 @@ def _render_win_screen(screen, winner):
     pygame.draw.rect(screen, (200, 80, 80), WIN_EXIT_RECT, 2, border_radius=6)
     lbl = _font(28).render("Exit Game", True, (255, 255, 255))
     screen.blit(lbl, lbl.get_rect(center=WIN_EXIT_RECT.center))
+
+    # Score graph
+    _render_score_graph(screen, score_history, civs)

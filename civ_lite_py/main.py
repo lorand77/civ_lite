@@ -1,11 +1,13 @@
 import pygame
 from civ_game.game import Game
-from civ_game.ui.renderer import render, WIN_EXIT_RECT
+from civ_game.ui.renderer import render, WIN_EXIT_RECT, compute_score
 from civ_game.ui.hud import UIState, END_TURN_RECT
 from civ_game.ui.city_screen import handle_city_screen_click, handle_city_screen_scroll
 from civ_game.ui.tech_screen import handle_tech_screen_click
 from civ_game.map.hex_grid import pixel_to_hex
 from civ_game.entities.unit import get_reachable_tiles, get_attackable_tiles
+
+CPU_TURN_DELAY_MS = 500  # milliseconds to pause after each CPU civ's turn
 
 
 def handle_event(event, game, ui_state):
@@ -93,8 +95,9 @@ def _run_cpu_turns(game, ui_state):
         if game.winner:
             break
 
-        pygame.time.wait(500)
+        pygame.time.wait(CPU_TURN_DELAY_MS)
         game.end_turn()
+        _record_scores(game, ui_state)
 
     # Now current player is human (or game is won) — show turn banner
     ui_state.turn_banner_timer = 120
@@ -119,8 +122,16 @@ def _run_cpu_turns(game, ui_state):
         new_civ.research_just_completed = False
 
 
+def _record_scores(game, ui_state):
+    """Append one score snapshot per game turn (called whenever game.turn advances)."""
+    if game.turn != ui_state._last_recorded_turn:
+        ui_state.score_history.append([compute_score(c, game) for c in game.civs])
+        ui_state._last_recorded_turn = game.turn
+
+
 def _do_end_turn(game, ui_state):
     game.end_turn()
+    _record_scores(game, ui_state)
     ui_state.deselect()
     _run_cpu_turns(game, ui_state)
 
@@ -311,6 +322,9 @@ def main():
     cpu_flags = run_setup_screen(screen)
     game = Game(num_players=4, map_cols=32, map_rows=20, seed=None, cpu_flags=cpu_flags)
     ui_state = UIState(screen=screen)
+
+    # Record turn 1 baseline scores
+    _record_scores(game, ui_state)
 
     # If the starting player is CPU, kick off the AI loop immediately
     if game.current_civ().is_cpu:
