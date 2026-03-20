@@ -1,6 +1,6 @@
 import pygame
 from civ_game.game import Game
-from civ_game.ui.renderer import render
+from civ_game.ui.renderer import render, WIN_EXIT_RECT
 from civ_game.ui.hud import UIState, END_TURN_RECT
 from civ_game.ui.city_screen import handle_city_screen_click, handle_city_screen_scroll
 from civ_game.ui.tech_screen import handle_tech_screen_click
@@ -71,20 +71,16 @@ def _promote_queued_message(ui_state):
         ui_state.auto_open_tech = False
 
 
-def _do_end_turn(game, ui_state):
+def _run_cpu_turns(game, ui_state):
+    """Run all consecutive CPU turns, panning the camera to each civ after its move."""
     from civ_game.map.hex_grid import hex_to_pixel, HEX_SIZE
     from civ_game.systems.ai import ai_take_turn
 
-    game.end_turn()
-    ui_state.deselect()
-
-    # Auto-play all consecutive CPU turns, briefly panning to each civ after its turn
     while (not game.winner
            and game.current_civ().is_cpu):
         cpu_civ = game.current_civ()
         ai_take_turn(game, cpu_civ)
 
-        # Pan camera to this civ's capital (or first unit if no capital yet)
         focus = cpu_civ.original_capital
         if not focus and cpu_civ.units:
             focus = cpu_civ.units[0]
@@ -93,15 +89,18 @@ def _do_end_turn(game, ui_state):
             game.camera.center_on_pixel(px, py)
         render(ui_state.screen, game, game.camera, ui_state)
         pygame.display.flip()
-        pygame.time.wait(500)
 
+        if game.winner:
+            break
+
+        pygame.time.wait(500)
         game.end_turn()
 
-    # Now current_player is human (or game is won) — show turn banner
+    # Now current player is human (or game is won) — show turn banner
     ui_state.turn_banner_timer = 120
 
-    # Center camera on the new (human) player's capital, or settler if not yet founded
     new_civ = game.current_civ()
+    from civ_game.map.hex_grid import hex_to_pixel, HEX_SIZE
     cap = new_civ.original_capital
     if cap:
         px, py = hex_to_pixel(cap.q, cap.r, hex_size=HEX_SIZE)
@@ -112,7 +111,6 @@ def _do_end_turn(game, ui_state):
             px, py = hex_to_pixel(settler.q, settler.r, hex_size=HEX_SIZE)
             game.camera.center_on_pixel(px, py)
 
-    # Queue start-of-turn messages (human player only)
     if new_civ.pending_messages:
         ui_state.queued_message = "\n".join(new_civ.pending_messages)
         new_civ.pending_messages.clear()
@@ -121,9 +119,18 @@ def _do_end_turn(game, ui_state):
         new_civ.research_just_completed = False
 
 
+def _do_end_turn(game, ui_state):
+    game.end_turn()
+    ui_state.deselect()
+    _run_cpu_turns(game, ui_state)
+
+
 def _handle_left_click(pos, game, ui_state):
-    # Block input if game is won
+    # Exit button on win screen
     if game.winner is not None:
+        if WIN_EXIT_RECT.collidepoint(pos):
+            pygame.quit()
+            raise SystemExit
         return
 
     # Dismiss turn banner on click
@@ -304,6 +311,10 @@ def main():
     cpu_flags = run_setup_screen(screen)
     game = Game(num_players=4, map_cols=32, map_rows=20, seed=None, cpu_flags=cpu_flags)
     ui_state = UIState(screen=screen)
+
+    # If the starting player is CPU, kick off the AI loop immediately
+    if game.current_civ().is_cpu:
+        _run_cpu_turns(game, ui_state)
 
     running = True
     while running:

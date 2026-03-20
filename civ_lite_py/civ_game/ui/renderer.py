@@ -359,7 +359,10 @@ def render(screen, game, camera, ui_state):
                 ui_state.tech_screen_open = True
                 ui_state.auto_open_tech = False
 
-    # --- Layer 14: Win screen ---
+    # --- Layer 14: Scoreboard ---
+    _render_scoreboard(screen, game)
+
+    # --- Layer 15: Win screen ---
     if game.winner is not None:
         _render_win_screen(screen, game.winner)
 
@@ -404,6 +407,82 @@ def _render_turn_banner(screen, game):
     screen.blit(sub,   sub.get_rect(center=(cx, cy + title.get_height() // 2 + 10)))
 
 
+def _compute_score(civ, game) -> int:
+    from civ_game.data.buildings import BUILDING_DEFS
+    from civ_game.data.units import UNIT_DEFS as _UD
+
+    score = 0
+    score += len(civ.cities) * 50
+    score += sum(c.population for c in civ.cities) * 20
+    score += sum(_UD[u.unit_type]["strength"] for u in civ.units if not u.is_civilian) * 3
+    score += len(civ.techs_researched) * 20
+    score += sum(1 for t in game.tiles.values() if t.owner == civ.player_index)
+    score += civ.gold // 10
+
+    for city in civ.cities:
+        for b_key in city.buildings:
+            defn = BUILDING_DEFS[b_key]
+            effects = defn.get("effects", {})
+            score += effects.get("food_per_turn",    0) * 4
+            score += effects.get("prod_per_turn",    0) * 5
+            score += effects.get("gold_per_turn",    0) * 3
+            score += effects.get("science_per_turn", 0) * 6
+            score += effects.get("culture_per_turn", 0) * 2
+            score += defn.get("defense", 0) * 8
+
+    return score
+
+
+def _render_scoreboard(screen, game):
+    panel_w = 280
+    row_h   = 36
+    pad     = 10
+    panel_h = pad + 30 + pad + row_h * len(game.civs) + pad
+    panel_x = SCREEN_W - panel_w - 10
+    panel_y = 10
+
+    # Background
+    bg = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+    bg.fill((15, 15, 25, 210))
+    screen.blit(bg, (panel_x, panel_y))
+    pygame.draw.rect(screen, (80, 80, 110), (panel_x, panel_y, panel_w, panel_h), 1)
+
+    # Title
+    title = _font(22).render("SCORES", True, (200, 200, 220))
+    screen.blit(title, title.get_rect(
+        centerx=panel_x + panel_w // 2, top=panel_y + pad))
+
+    # Divider
+    dy = panel_y + pad + 26
+    pygame.draw.line(screen, (70, 70, 100),
+                     (panel_x + 8, dy), (panel_x + panel_w - 8, dy), 1)
+
+    # Compute and sort
+    entries = sorted(
+        [(civ, _compute_score(civ, game)) for civ in game.civs],
+        key=lambda x: x[1], reverse=True
+    )
+
+    for rank, (civ, score) in enumerate(entries):
+        ry = dy + pad + rank * row_h
+        color = civ.color if not civ.is_eliminated else (80, 80, 80)
+
+        # Color swatch
+        pygame.draw.rect(screen, color, (panel_x + 10, ry + 8, 16, 16))
+
+        # Name
+        name_surf = _font(20).render(civ.name, True, color)
+        screen.blit(name_surf, (panel_x + 34, ry + 8))
+
+        # Score (right-aligned)
+        label = "eliminated" if civ.is_eliminated else str(score)
+        score_surf = _font(20).render(label, True, color)
+        screen.blit(score_surf, (panel_x + panel_w - score_surf.get_width() - 10, ry + 8))
+
+
+WIN_EXIT_RECT = pygame.Rect(SCREEN_W // 2 - 100, SCREEN_H // 2 + 110, 200, 48)
+
+
 def _render_win_screen(screen, winner):
     from civ_game.game import PLAYER_NAMES, PLAYER_COLORS
 
@@ -416,10 +495,16 @@ def _render_win_screen(screen, winner):
 
     title = _font(90).render("VICTORY!", True, (255, 215, 0))
     sub   = _font(44).render(f"{cname} achieves Domination!", True, color)
-    hint  = _font(30).render("Close the window to exit.", True, (180, 180, 180))
 
     cx = SCREEN_W // 2
     cy = SCREEN_H // 2
     screen.blit(title, title.get_rect(center=(cx, cy - 70)))
     screen.blit(sub,   sub.get_rect(center=(cx, cy + 20)))
-    screen.blit(hint,  hint.get_rect(center=(cx, cy + 80)))
+
+    # Exit button
+    mp = pygame.mouse.get_pos()
+    btn_color = (160, 50, 50) if WIN_EXIT_RECT.collidepoint(mp) else (110, 30, 30)
+    pygame.draw.rect(screen, btn_color, WIN_EXIT_RECT, border_radius=6)
+    pygame.draw.rect(screen, (200, 80, 80), WIN_EXIT_RECT, 2, border_radius=6)
+    lbl = _font(28).render("Exit Game", True, (255, 255, 255))
+    screen.blit(lbl, lbl.get_rect(center=WIN_EXIT_RECT.center))
