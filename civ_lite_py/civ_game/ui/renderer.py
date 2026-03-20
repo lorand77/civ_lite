@@ -408,6 +408,9 @@ def _render_turn_banner(screen, game):
 
 
 def compute_score(civ, game) -> int:
+    if civ.is_eliminated:
+        return 0
+
     from civ_game.data.buildings import BUILDING_DEFS
     from civ_game.data.units import UNIT_DEFS as _UD
 
@@ -480,32 +483,36 @@ def _render_scoreboard(screen, game):
         screen.blit(score_surf, (panel_x + panel_w - score_surf.get_width() - 10, ry + 8))
 
 
-WIN_EXIT_RECT = pygame.Rect(SCREEN_W // 2 - 100, SCREEN_H // 2 + 110, 200, 48)
+WIN_EXIT_RECT = pygame.Rect(SCREEN_W // 2 - 90, 278, 180, 42)
+
+# Graph occupies the lower portion of the win screen
+_GRAPH_X = 100
+_GRAPH_Y = 355
+_GRAPH_W = SCREEN_W - 200
+_GRAPH_H = SCREEN_H - _GRAPH_Y - 30
 
 
 def _render_score_graph(screen, score_history, civs):
     if len(score_history) < 2:
         return
 
-    graph_w, graph_h = 900, 220
-    graph_x = SCREEN_W // 2 - graph_w // 2
-    graph_y = SCREEN_H // 2 + 175
-    pad_l, pad_r, pad_t, pad_b = 55, 20, 18, 30
+    pad_l, pad_r, pad_t, pad_b = 62, 24, 36, 38
 
-    plot_x = graph_x + pad_l
-    plot_y = graph_y + pad_t
-    plot_w = graph_w - pad_l - pad_r
-    plot_h = graph_h - pad_t - pad_b
+    plot_x = _GRAPH_X + pad_l
+    plot_y = _GRAPH_Y + pad_t
+    plot_w = _GRAPH_W - pad_l - pad_r
+    plot_h = _GRAPH_H - pad_t - pad_b
 
-    # Background
-    bg = pygame.Surface((graph_w, graph_h), pygame.SRCALPHA)
-    bg.fill((10, 10, 20, 220))
-    screen.blit(bg, (graph_x, graph_y))
-    pygame.draw.rect(screen, (70, 70, 100), (graph_x, graph_y, graph_w, graph_h), 1)
+    # Background panel
+    bg = pygame.Surface((_GRAPH_W, _GRAPH_H), pygame.SRCALPHA)
+    bg.fill((8, 8, 18, 230))
+    screen.blit(bg, (_GRAPH_X, _GRAPH_Y))
+    pygame.draw.rect(screen, (60, 60, 95),
+                     (_GRAPH_X, _GRAPH_Y, _GRAPH_W, _GRAPH_H), 1)
 
-    # Title
-    t = _font(18).render("Score History", True, (160, 160, 190))
-    screen.blit(t, (graph_x + pad_l, graph_y + 4))
+    # Panel title
+    t = _font(20).render("Score History", True, (150, 150, 185))
+    screen.blit(t, (_GRAPH_X + pad_l, _GRAPH_Y + 10))
 
     max_score = max(s for turn in score_history for s in turn)
     if max_score == 0:
@@ -513,11 +520,21 @@ def _render_score_graph(screen, score_history, civs):
     num_turns = len(score_history)
 
     # Horizontal grid lines + Y labels
-    for i in range(5):
-        gy = plot_y + plot_h - int(plot_h * i / 4)
-        pygame.draw.line(screen, (35, 35, 55), (plot_x, gy), (plot_x + plot_w, gy), 1)
-        lbl = _font(15).render(str(int(max_score * i / 4)), True, (100, 100, 130))
-        screen.blit(lbl, (graph_x + 4, gy - 7))
+    for i in range(6):
+        gy = plot_y + plot_h - int(plot_h * i / 5)
+        pygame.draw.line(screen, (28, 28, 48), (plot_x, gy), (plot_x + plot_w, gy), 1)
+        lbl = _font(16).render(str(int(max_score * i / 5)), True, (90, 90, 120))
+        screen.blit(lbl, (_GRAPH_X + 6, gy - 8))
+
+    # Vertical grid lines (every ~10 turns)
+    step = max(1, num_turns // 10)
+    for ti in range(0, num_turns, step):
+        gx = plot_x + int(ti * plot_w / max(1, num_turns - 1))
+        pygame.draw.line(screen, (28, 28, 48), (gx, plot_y), (gx, plot_y + plot_h), 1)
+
+    # Plot border
+    pygame.draw.rect(screen, (50, 50, 80),
+                     (plot_x, plot_y, plot_w, plot_h), 1)
 
     # Civ lines
     for ci, civ in enumerate(civs):
@@ -527,48 +544,53 @@ def _render_score_graph(screen, score_history, civs):
             y = plot_y + plot_h - int(turn_scores[ci] * plot_h / max_score)
             points.append((x, y))
         if len(points) >= 2:
-            pygame.draw.lines(screen, civ.color, False, points, 2)
+            pygame.draw.lines(screen, civ.color, False, points, 3)
 
-    # X axis turn labels
-    lbl1 = _font(15).render("Turn 1", True, (100, 100, 130))
-    screen.blit(lbl1, (plot_x, graph_y + graph_h - pad_b + 6))
-    lbln = _font(15).render(f"Turn {num_turns}", True, (100, 100, 130))
-    screen.blit(lbln, (plot_x + plot_w - lbln.get_width(), graph_y + graph_h - pad_b + 6))
+    # X axis labels
+    lbl1 = _font(16).render("Turn 1", True, (90, 90, 120))
+    screen.blit(lbl1, (plot_x, _GRAPH_Y + _GRAPH_H - pad_b + 8))
+    lbln = _font(16).render(f"Turn {num_turns}", True, (90, 90, 120))
+    screen.blit(lbln, (plot_x + plot_w - lbln.get_width(),
+                       _GRAPH_Y + _GRAPH_H - pad_b + 8))
 
-    # Legend (bottom-right inside graph)
-    lx = plot_x + plot_w - 160
-    ly = plot_y + 2
+    # Legend (top-right inside plot area)
+    lx = plot_x + plot_w - 180
+    ly = plot_y + 8
     for ci, civ in enumerate(civs):
-        col = (80, 80, 80) if civ.is_eliminated else civ.color
-        pygame.draw.rect(screen, col, (lx, ly + ci * 20, 10, 10))
-        name_surf = _font(15).render(civ.name, True, col)
-        screen.blit(name_surf, (lx + 14, ly + ci * 20 - 1))
+        col = (70, 70, 70) if civ.is_eliminated else civ.color
+        pygame.draw.rect(screen, col, (lx, ly + ci * 24, 14, 14))
+        name_surf = _font(18).render(civ.name, True, col)
+        screen.blit(name_surf, (lx + 20, ly + ci * 24 - 1))
 
 
 def _render_win_screen(screen, winner, score_history, civs):
     from civ_game.game import PLAYER_NAMES, PLAYER_COLORS
 
     overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-    overlay.fill((0, 0, 0, 190))
+    overlay.fill((0, 0, 0, 200))
     screen.blit(overlay, (0, 0))
 
+    cx    = SCREEN_W // 2
     cname = PLAYER_NAMES[winner]
     color = PLAYER_COLORS[winner]
 
+    # Title
     title = _font(90).render("VICTORY!", True, (255, 215, 0))
-    sub   = _font(44).render(f"{cname} achieves Domination!", True, color)
+    screen.blit(title, title.get_rect(center=(cx, 110)))
 
-    cx = SCREEN_W // 2
-    cy = SCREEN_H // 2
-    screen.blit(title, title.get_rect(center=(cx, cy - 70)))
-    screen.blit(sub,   sub.get_rect(center=(cx, cy + 20)))
+    # Subtitle
+    sub = _font(40).render(f"{cname} achieves Domination!", True, color)
+    screen.blit(sub, sub.get_rect(center=(cx, 200)))
+
+    # Thin separator
+    pygame.draw.line(screen, (80, 80, 110), (cx - 320, 240), (cx + 320, 240), 1)
 
     # Exit button
     mp = pygame.mouse.get_pos()
     btn_color = (160, 50, 50) if WIN_EXIT_RECT.collidepoint(mp) else (110, 30, 30)
     pygame.draw.rect(screen, btn_color, WIN_EXIT_RECT, border_radius=6)
     pygame.draw.rect(screen, (200, 80, 80), WIN_EXIT_RECT, 2, border_radius=6)
-    lbl = _font(28).render("Exit Game", True, (255, 255, 255))
+    lbl = _font(26).render("Exit Game", True, (255, 255, 255))
     screen.blit(lbl, lbl.get_rect(center=WIN_EXIT_RECT.center))
 
     # Score graph

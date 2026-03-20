@@ -7,7 +7,7 @@ from civ_game.ui.tech_screen import handle_tech_screen_click
 from civ_game.map.hex_grid import pixel_to_hex
 from civ_game.entities.unit import get_reachable_tiles, get_attackable_tiles
 
-CPU_TURN_DELAY_MS = 500  # milliseconds to pause after each CPU civ's turn
+CPU_TURN_DELAY_MS = 10  # milliseconds to pause after each CPU civ's turn
 
 
 def handle_event(event, game, ui_state):
@@ -78,7 +78,7 @@ def _run_cpu_turns(game, ui_state):
     from civ_game.map.hex_grid import hex_to_pixel, HEX_SIZE
     from civ_game.systems.ai import ai_take_turn
 
-    while (not game.winner
+    while (game.winner is None
            and game.current_civ().is_cpu):
         cpu_civ = game.current_civ()
         ai_take_turn(game, cpu_civ)
@@ -92,7 +92,7 @@ def _run_cpu_turns(game, ui_state):
         render(ui_state.screen, game, game.camera, ui_state)
         pygame.display.flip()
 
-        if game.winner:
+        if game.winner is not None:
             break
 
         pygame.time.wait(CPU_TURN_DELAY_MS)
