@@ -23,10 +23,18 @@ PLAYER_COLORS = [
 ]
 
 CITY_NAMES = [
-    ["Rome",    "Florence", "Venice",  "Genoa",   "Naples"],
-    ["Athens",  "Sparta",   "Corinth", "Delphi",  "Argos"],
-    ["Attila's Court",   "Pannonia",     "Germania",   "Gothia",  "Scythia"],
-    ["Babylon", "Ur", "Nineveh", "Kish",    "Akkad"],
+    # Rome
+    ["Rome", "Florence", "Venice", "Genoa", "Naples",
+     "Milan", "Bologna", "Pisa", "Ravenna", "Verona", "Capua", "Palermo"],
+    # Greece
+    ["Athens", "Sparta", "Corinth", "Delphi", "Argos",
+     "Thessaloniki", "Rhodes", "Mycenae", "Olympia", "Thebes", "Ephesus", "Pergamon"],
+    # Huns
+    ["Attila's Court", "Pannonia", "Germania", "Gothia", "Scythia",
+     "Etzelburg", "Hunuguri", "Savaria", "Aquincum", "Carpathia", "Moesia", "Dacia"],
+    # Babylon
+    ["Babylon", "Ur", "Nineveh", "Kish", "Akkad",
+     "Eridu", "Nippur", "Lagash", "Uruk", "Susa", "Assur", "Ctesiphon"],
 ]
 
 
@@ -270,7 +278,8 @@ class Game:
         """Settler founds a city at its current position."""
         civ = self.civs[unit.owner]
         city_idx = len(civ.cities)
-        name = CITY_NAMES[unit.owner][city_idx % len(CITY_NAMES[unit.owner])]
+        names = CITY_NAMES[unit.owner]
+        name = names[city_idx] if city_idx < len(names) else f"{PLAYER_NAMES[unit.owner]} {city_idx + 1}"
 
         city = City(
             name=name, q=unit.q, r=unit.r,
@@ -635,7 +644,7 @@ class Game:
 
             # City HP regeneration
             if city.hp < 50:
-                city.hp = min(50, city.hp + 5)
+                city.hp = min(50, city.hp + 3)
 
         # Unit maintenance: 1 gold per military unit per turn
         for unit in civ.units:
