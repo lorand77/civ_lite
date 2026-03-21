@@ -418,7 +418,7 @@ def _act_worker(game, civ, worker):
 # ---------------------------------------------------------------------------
 # Component 8 — City Production Scoring
 # ---------------------------------------------------------------------------
-def _act_city(game, civ, city):
+def _act_city(game, civ, city, attack_target=None):
     if city.production_queue:
         return
 
@@ -429,6 +429,9 @@ def _act_city(game, civ, city):
     military_count = sum(1 for u in civ.units if not u.is_civilian)
     city_count = len(civ.cities)
     military_need = max(0, city_count * 2 - military_count)
+    ranged_count = sum(1 for u in civ.units
+                       if not u.is_civilian and UNIT_DEFS[u.unit_type].get("ranged_strength"))
+    ranged_ratio = ranged_count / military_count if military_count > 0 else 0.0
 
     best_score = -9999
     best_key = None
@@ -458,8 +461,17 @@ def _act_city(game, civ, city):
                 for t in game.tiles.values()
             ):
                 continue
-            base = 30 + defn["strength"] * 1.5
+            effective_str = defn.get("ranged_strength") or defn["strength"]
+            base = 30 + effective_str * 1.5
+            siege_urgency = 2.0 if attack_target else 0.5
+            base += defn.get("bonus_vs_city", 0) * 5 * siege_urgency
             score = (base + military_need * 8) * flavors["military"]
+
+            unit_is_ranged = bool(defn.get("ranged_strength"))
+            if unit_is_ranged and ranged_ratio > 0.5:
+                score *= 0.35  # too many ranged — strongly prefer melee
+            elif not unit_is_ranged and ranged_ratio < 0.25:
+                score *= 0.65  # too few ranged — softly nudge toward ranged
 
         turns = max(1, (get_item_cost(key) - city.production_progress + prod_pt - 1) // prod_pt)
         score -= turns * 0.5
@@ -619,7 +631,7 @@ def ai_take_turn(game, civ):
 
     # City production
     for city in civ.cities:
-        _act_city(game, civ, city)
+        _act_city(game, civ, city, attack_target)
 
     # Civilians first (settlers, workers), then military
     for unit in list(civ.units):
