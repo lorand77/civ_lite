@@ -49,6 +49,7 @@ class UIState:
 
     score_history: list = field(default_factory=list)  # [[s0,s1,s2,s3], ...] per game turn
     _last_recorded_turn: int = 0
+    paused: bool = False
 
     def set_message(self, msg: str, duration: int = 180):
         self.message = msg

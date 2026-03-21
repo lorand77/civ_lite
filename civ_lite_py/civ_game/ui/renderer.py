@@ -362,7 +362,16 @@ def render(screen, game, camera, ui_state):
     # --- Layer 14: Scoreboard ---
     _render_scoreboard(screen, game)
 
-    # --- Layer 15: Win screen ---
+    # --- Layer 15: Pause indicator ---
+    if getattr(ui_state, "paused", False):
+        lbl = _font(36).render("  PAUSED — Press P to resume  ", True, (255, 220, 80))
+        r = lbl.get_rect(center=(SCREEN_W // 2, 36))
+        bg = pygame.Surface((r.width + 12, r.height + 6), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 180))
+        screen.blit(bg, (r.x - 6, r.y - 3))
+        screen.blit(lbl, r)
+
+    # --- Layer 16: Win screen ---
     if game.winner is not None:
         _render_win_screen(screen, game.winner, ui_state.score_history, game.civs)
 

@@ -80,6 +80,39 @@ def _run_cpu_turns(game, ui_state):
 
     while (game.winner is None
            and game.current_civ().is_cpu):
+
+        # Process events: pause toggle + camera pan
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                raise SystemExit
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_p:
+                ui_state.paused = not ui_state.paused
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 2:
+                ui_state.pan_start = event.pos
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 4:
+                game.camera.zoom = 1
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 5:
+                game.camera.zoom = 0
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 2:
+                ui_state.pan_start = None
+            elif event.type == pygame.MOUSEMOTION and ui_state.pan_start:
+                dx = event.pos[0] - ui_state.pan_start[0]
+                dy = event.pos[1] - ui_state.pan_start[1]
+                game.camera.pan(dx, dy)
+                ui_state.pan_start = event.pos
+
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT]:  game.camera.pan(-8, 0)
+        if keys[pygame.K_RIGHT]: game.camera.pan(8, 0)
+        if keys[pygame.K_UP]:    game.camera.pan(0, -8)
+        if keys[pygame.K_DOWN]:  game.camera.pan(0, 8)
+
+        if ui_state.paused:
+            render(ui_state.screen, game, game.camera, ui_state)
+            pygame.time.wait(16)
+            continue
+
         cpu_civ = game.current_civ()
         ai_take_turn(game, cpu_civ)
 
