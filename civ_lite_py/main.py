@@ -224,7 +224,7 @@ def _handle_left_click(pos, game, ui_state):
         game.move_unit(selected_unit, q, r, cost=cost)
         # Recalculate after move
         if selected_unit.moves_left > 0:
-            ui_state.reachable_tiles = get_reachable_tiles(selected_unit, game.tiles)
+            ui_state.reachable_tiles = get_reachable_tiles(selected_unit, game.tiles, game.turn)
             ui_state.attackable_tiles = get_attackable_tiles(selected_unit, game.tiles)
         else:
             ui_state.reachable_tiles = {}

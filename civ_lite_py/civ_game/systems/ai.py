@@ -334,7 +334,7 @@ def _act_military_unit(game, civ, unit, roles, attack_target, danger):
 # Component 6 — Settler Behavior
 # ---------------------------------------------------------------------------
 def _score_settle_tile(q, r, game, civ) -> float:
-    from civ_game.map.terrain import TERRAIN_YIELDS, RESOURCES
+    from civ_game.map.terrain import TERRAIN_YIELDS
     score = 0.0
 
     for (tq, tr) in hexes_in_range(q, r, 2):
@@ -562,7 +562,7 @@ def _pick_research(game, civ):
             score += effects.get("prod_per_turn",    0) * 4 * flavors["buildings"]
             score += effects.get("food_per_turn",    0) * 4 * flavors["buildings"]
 
-        for imp_key in defn.get("unlocks_improvements", []):
+        for _ in defn.get("unlocks_improvements", []):
             score += 15 * flavors["buildings"]
 
         for res in defn.get("reveals_resources", []):
@@ -593,7 +593,9 @@ def _act_gold(game, civ):
 
     if not urgent_need:
         return
-    if civ.gold < 80:
+    # Aggressive leaders buy with a smaller gold reserve; pacifist leaders hoard more.
+    gold_threshold = int(80 / flavors["aggression"])
+    if civ.gold < gold_threshold:
         return
 
     best_city = None

@@ -696,7 +696,7 @@ for each city in civ.cities:
         city.culture_stored -= 20
         _expand_border(civ)            # claim 1 best adjacent unclaimed tile
 
-    city.hp = min(50, city.hp + 5)    # city HP regenerates 5/turn
+    city.hp = min(50, city.hp + 3)    # city HP regenerates 3/turn
 
 # Unit maintenance
 for each military unit: civ.gold -= 1
