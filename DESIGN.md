@@ -7,14 +7,17 @@ This document reflects the **actual implemented state** of the game. It is the s
 ## Overview
 
 - **Genre**: Turn-based 4X strategy (Explore, Expand, Exploit, Exterminate)
-- **Players**: 4 humans, hotseat (pass the keyboard)
+- **Players**: 1–4 players; each can be Human or CPU. Configured on the setup screen before the game starts. Default: Player 1 (Rome) is Human, Players 2–4 are CPU.
 - **Victory**: Domination only — capture all other civilizations' original capitals
-- **AI**: None in v1
+- **AI**: Threat-aware scored AI (Option C). Each CPU civ executes its full turn instantly. Four distinct leader personalities via flavor weights.
 - **Map**: 32 × 20 pointy-top hex grid, procedurally generated
 - **Art**: PNG terrain images and resource icons; colored shapes as fallback
 - **Libraries**: `pygame`, `numpy` (installed in `.venv`)
 - **Python**: 3.12 (`.venv` at `/workspace/.venv`)
-- **Entry point**: `cd /workspace/civ_lite_py && ../.venv/bin/python main.py`
+- **Entry points**:
+  - `cd /workspace/civ_lite_py && ../.venv/bin/python main.py` — interactive game
+  - `cd /workspace/civ_lite_py && ../.venv/bin/python spectate.py` — AI-vs-AI spectator mode
+  - `cd /workspace/civ_lite_py && ../.venv/bin/python simulate.py` — headless batch simulation
 
 ---
 
@@ -23,8 +26,11 @@ This document reflects the **actual implemented state** of the game. It is the s
 ```
 /workspace/
 ├── DESIGN.md                    ← this file
+├── DESIGN-AI.md                 ← AI system design
 └── civ_lite_py/
-    ├── main.py                  ← entry point + input handling + hotseat flow
+    ├── main.py                  ← interactive entry point: input handling, hotseat + CPU flow
+    ├── spectate.py              ← AI spectator mode: 4-CPU game, zoomed-out simplified renderer
+    ├── simulate.py              ← headless batch simulation: runs N games, prints win statistics
     └── civ_game/
         ├── __init__.py
         ├── game.py              # Game state, Camera, turn manager, win detection
@@ -34,7 +40,7 @@ This document reflects the **actual implemented state** of the game. It is the s
         │   ├── terrain.py       # Terrain & resource definitions + yields
         │   └── generator.py     # Procedural map generation (numpy)
         ├── entities/
-        │   ├── civilization.py  # Per-player state
+        │   ├── civilization.py  # Per-player state (including is_cpu flag)
         │   ├── city.py          # City: population, food, production, buildings
         │   ├── unit.py          # Unit instance + movement/attack BFS
         │   └── improvement.py   # Tile improvement definitions
@@ -42,12 +48,15 @@ This document reflects the **actual implemented state** of the game. It is the s
         │   ├── combat.py        # Melee/ranged damage + city capture
         │   ├── production.py    # Production queue processing
         │   ├── tech_tree.py     # Tech prerequisites helper functions
-        │   └── yields.py        # Per-city yield calculation
+        │   ├── yields.py        # Per-city yield calculation
+        │   ├── ai.py            # CPU AI logic (scored, threat-aware, flavor-weighted)
+        │   └── score.py         # compute_score() — used by scoreboard + win screen
         ├── ui/
         │   ├── renderer.py      # All pygame drawing + asset loading
         │   ├── hud.py           # Bottom info bar + UIState dataclass
         │   ├── city_screen.py   # City detail popup
-        │   └── tech_screen.py   # Tech tree overlay
+        │   ├── tech_screen.py   # Tech tree overlay
+        │   └── setup_screen.py  # Pre-game player setup (Human/CPU toggles)
         └── data/
             ├── units.py         # Unit type definitions (static)
             ├── buildings.py     # Building definitions (static)
@@ -74,20 +83,28 @@ HUD_HEIGHT = 180       # bottom bar height in pixels
 
 # Player colors (R, G, B)
 PLAYER_COLORS = [
-    (220, 50,  50),    # Player 1: Red
-    (50,  100, 220),   # Player 2: Blue
-    (50,  180, 50),    # Player 3: Green
-    (220, 180, 50),    # Player 4: Yellow
+    (220, 50,  50),    # Rome:     Red
+    (50,  100, 220),   # Greece:   Blue
+    (50,  180, 50),    # The Huns: Green
+    (220, 180, 50),    # Babylon:  Yellow
 ]
 
-PLAYER_NAMES = ["Player 1", "Player 2", "Player 3", "Player 4"]
+PLAYER_NAMES = ["Rome", "Greece", "The Huns", "Babylon"]
 
-# City name pools (5 names per player, cycling)
+# City name pools (12 names per player, cycling)
 CITY_NAMES = [
-    ["Rome",    "Florence", "Venice",  "Genoa",   "Naples"],
-    ["Athens",  "Sparta",   "Corinth", "Thebes",  "Argos"],
-    ["Delhi",   "Agra",     "Patna",   "Mysore",  "Lahore"],
-    ["Babylon", "Ur",       "Nineveh", "Kish",    "Akkad"],
+    # Rome
+    ["Rome", "Florence", "Venice", "Genoa", "Naples",
+     "Milan", "Bologna", "Pisa", "Ravenna", "Verona", "Capua", "Palermo"],
+    # Greece
+    ["Athens", "Sparta", "Corinth", "Delphi", "Argos",
+     "Thessaloniki", "Rhodes", "Mycenae", "Olympia", "Thebes", "Ephesus", "Pergamon"],
+    # Huns
+    ["Attila's Court", "Pannonia", "Germania", "Gothia", "Scythia",
+     "Etzelburg", "Hunuguri", "Savaria", "Aquincum", "Carpathia", "Moesia", "Dacia"],
+    # Babylon
+    ["Babylon", "Ur", "Nineveh", "Kish", "Akkad",
+     "Eridu", "Nippur", "Lagash", "Uruk", "Susa", "Assur", "Ctesiphon"],
 ]
 ```
 
@@ -272,13 +289,16 @@ class Civilization:
     units: list[Unit]
 
     gold: int = 0
+    gold_per_turn: int = 0          # cached net gold income (informational)
     science: int = 0                # accumulated beakers
+    science_per_turn: int = 0       # cached science yield (informational)
     culture: int = 0                # total accumulated culture
 
     current_research: str | None = None
     techs_researched: set = field(default_factory=set)
     original_capital: City | None = None
     is_eliminated: bool = False
+    is_cpu: bool = False            # True → AI controls this player
 
     pending_messages: list = field(default_factory=list)
     # Messages shown at the START of that player's NEXT turn (after turn banner).
@@ -720,15 +740,20 @@ if civ.gold < 0:
 
 ---
 
-## Hotseat Turn Flow
+## Turn Flow
 
-When a player presses Enter or clicks END TURN (`_do_end_turn` in `main.py`):
+When a human player presses Enter or clicks END TURN (`_do_end_turn` in `main.py`):
 
 1. `game.end_turn()` processes all turn logic and advances `current_player`
-2. Camera centers on new player's **original capital** (or their settler if no capital yet)
-3. Turn banner: `"[Player Name]'s Turn — Turn N"` shown for 120 frames (2 seconds)
-4. Player clicks or presses any key to dismiss the banner
-5. On dismiss: `civ.pending_messages` shown as popup notification; if
+2. `_record_scores()` appends a score snapshot to `ui_state.score_history`
+3. **CPU turns run in a tight loop** (`_run_cpu_turns`): while the next player is CPU,
+   `ai_take_turn(game, civ)` executes, the camera pans to that civ, the frame is rendered,
+   a short delay (`CPU_TURN_DELAY_MS = 10 ms`) is inserted, then `game.end_turn()` is called
+   again. The loop repeats until a human player's turn or the game is won.
+   - During CPU turns, pressing **P** pauses/unpauses. Arrow keys and middle-mouse still pan.
+4. When a human's turn arrives: turn banner shown for 120 frames, camera centers on capital
+5. Player clicks or presses any key to dismiss the banner
+6. On dismiss: `civ.pending_messages` shown as popup notification; if
    `research_just_completed`, tech screen opens automatically
 
 ---
@@ -797,6 +822,8 @@ If the player has no capital yet, centers on their settler.
 | P          | Build Pasture (Worker only) |
 | K          | Fortify unit (military only) |
 | H          | Heal unit — only if at full movement points (military only) |
+| U          | Upgrade unit — if upgrade path available, tech + resource requirements met, and enough gold |
+| P          | Pause/unpause (during CPU turns only; also works as Pasture key for Worker) |
 
 **Mouse:**
 
@@ -879,7 +906,9 @@ Layer 10 — Tech screen modal (if open)
 Layer 11 — City screen modal (if open)
 Layer 12 — Notification popup (multi-line, semi-transparent, auto-dismiss 3 sec)
 Layer 13 — Turn banner (hotseat handoff, dismissible by click/key, 120 frames)
-Layer 14 — Win screen (domination victory overlay, blocks all input)
+Layer 14 — Scoreboard panel (top-right corner, always visible; sorted by score)
+Layer 15 — Pause indicator (centered banner "PAUSED — Press P to resume")
+Layer 16 — Win screen (domination victory overlay + score history graph, blocks input)
 ```
 
 ---
@@ -900,7 +929,39 @@ Left half                                  Right half
 
 - If a unit is selected and in own territory, the heal hint shows exact HP gain (20)
 - If in enemy/neutral territory, the heal hint shows 10
+- If a military unit has an upgrade path available (tech + resource + gold), the hint
+  shows `U=Upgrade→<name>(<cost>g)`
 - END TURN button: `(SCREEN_W − 220, SCREEN_H − 66, 200 × 48)`
+
+### UIState dataclass
+
+Defined in `ui/hud.py`. Tracks all transient UI state for the interactive game.
+
+```python
+@dataclass
+class UIState:
+    screen: object = None           # pygame surface
+    selected_tile: object = None
+    pan_start: tuple | None = None
+    selected_unit: object = None
+    selected_city: object = None
+    reachable_tiles: dict = field(default_factory=dict)
+    attackable_tiles: set = field(default_factory=set)
+    city_screen_open: bool = False
+    city_screen_item_rects: list = field(default_factory=list)
+    city_screen_buy_rects: list = field(default_factory=list)
+    city_screen_close_rect: object = None
+    city_screen_scroll: int = 0
+    tech_screen_open: bool = False
+    turn_banner_timer: int = 0
+    message: str = ""
+    message_timer: int = 0
+    queued_message: str = ""        # shown after turn banner clears
+    auto_open_tech: bool = False    # open tech screen after banner clears
+    score_history: list = field(default_factory=list)  # [[s0,s1,s2,s3], ...] per turn
+    _last_recorded_turn: int = 0
+    paused: bool = False            # pause flag used during CPU turn loop
+```
 
 ---
 
@@ -976,3 +1037,94 @@ centered popup, auto-dismiss after 3 seconds.
 bankruptcy — stored in `civ.pending_messages`, shown at the **start of that
 player's next turn** after the turn banner is dismissed. Multiple messages stack
 in one popup. If a tech completed, the tech screen also opens automatically.
+
+---
+
+## Score System
+
+File: `systems/score.py` — `compute_score(civ, game) -> int`
+
+Used by the in-game scoreboard panel, the win-screen graph, and `spectate.py`.
+
+```python
+score = 0
+score += len(civ.cities) * 50
+score += sum(c.population for c in civ.cities) * 20
+score += sum(UNIT_DEFS[u.unit_type]["strength"] for u in civ.units if not u.is_civilian) * 3
+score += len(civ.techs_researched) * 20
+score += sum(1 for t in game.tiles.values() if t.owner == civ.player_index)   # territory tiles
+score += civ.gold // 10
+# Building bonuses (per city, per building)
+score += food_per_turn * 4 + prod_per_turn * 5 + gold_per_turn * 3
+       + science_per_turn * 6 + culture_per_turn * 2 + defense * 8
+```
+
+Returns 0 for eliminated civs.
+
+---
+
+## Win Screen
+
+Triggered when `game.winner is not None`. Rendered as Layer 16 on top of everything.
+
+Contents:
+1. Dark semi-transparent overlay
+2. "VICTORY!" title in gold
+3. Winner name + "achieves Domination on turn N" in winner's color
+4. "EXIT GAME" button — `pygame.Rect(SCREEN_W // 2 − 90, 278, 180, 42)`
+5. Score history graph — line chart covering the full game, one line per civ in their color,
+   showing `compute_score()` sampled once per game turn. Y-axis labeled 0→max_score.
+   Rendered from `ui_state.score_history` (a list of `[s0, s1, s2, s3]` lists).
+
+Score snapshots are recorded in `ui_state.score_history` by `_record_scores()`, which is
+called after every `game.end_turn()` invocation (both human and CPU turns).
+
+---
+
+## Spectator Mode
+
+Entry point: `spectate.py`
+
+Runs a 4-CPU game with a simplified renderer designed to show the whole map at once.
+
+- Map scaled to fit the window with a thin HUD bar at the top
+- Terrain: flat muted hex colors (no PNG images)
+- Cities: colored squares, size proportional to population; gold dot for original capital
+- Military units: colored circles, radius proportional to strength; white outer ring for ranged
+- Civilian units: suppressed (not drawn)
+- Stacked units on the same hex use small spiral offsets
+- City-hex units suppressed (city square dominates)
+
+HUD (top bar):
+- Current turn number
+- Per-civ summary: name, city count, unit count, current score
+- Speed/pause indicator
+
+Score bars: small horizontal bar chart in the bottom-right corner
+
+Speed control: 5 presets — ×1 (10 fps), ×2 (20 fps), ×4 (40 fps), ×8 (80 fps), MAX (uncapped)
+
+Controls: `SPACE` = pause/unpause, `+`/`=` = increase speed, `-` = decrease speed, `ESC` = quit
+
+---
+
+## Headless Simulation
+
+Entry point: `simulate.py`
+
+Runs `NUM_GAMES = 100` full games headlessly (no pygame window). All 4 players are CPU.
+Each game uses a different seed (`seed=i`). Max `MAX_TURNS = 2000` per game to prevent
+infinite loops on rare stalemates.
+
+Prints per-game results and a summary:
+```
+Game   1: winner=Rome   turns=312
+...
+=== Summary ===
+  Rome:     42 wins
+  Greece:   28 wins
+  The Huns: 19 wins
+  Babylon:  11 wins
+  Timeout (no winner): 0
+  Avg turns: 387.4
+```

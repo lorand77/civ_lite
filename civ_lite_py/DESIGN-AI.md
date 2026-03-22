@@ -2,8 +2,7 @@
 
 ## Overview
 
-This document is the complete, self-contained implementation guide for adding CPU-controlled
-opponents. It can be used from a fresh context — no prior conversation needed.
+This document describes the implemented CPU AI system. All code is in place.
 
 **Approach:** Option C — Threat-Aware Scored AI
 **Victory condition:** Domination only (own all original capitals). There are no science/culture
@@ -53,13 +52,15 @@ player_index: int          # 0–3
 cities: list[City]
 units: list[Unit]
 gold: int
+gold_per_turn: int         # cached net gold income (informational)
 science: int
+science_per_turn: int      # cached science yield (informational)
 current_research: str | None
 techs_researched: set[str]
 original_capital: City | None
 is_eliminated: bool
 pending_messages: list[str]   # append here; shown to human at turn start
-is_cpu: bool = False          # ADD THIS FIELD
+is_cpu: bool = False
 ```
 
 **Unit** (`civ_game/entities/unit.py`):
@@ -136,15 +137,18 @@ game.end_turn()                          # processes end-of-turn; advances curre
 
 ---
 
-## Files to Create / Modify
+## Files Created / Modified
 
 | File | Change |
 |------|--------|
-| `civ_game/systems/ai.py` | **CREATE** — all AI logic |
-| `civ_game/ui/setup_screen.py` | **CREATE** — pre-game player setup UI |
-| `civ_game/entities/civilization.py` | **MODIFY** — add `is_cpu: bool = False` field |
-| `civ_game/game.py` | **MODIFY** — accept `cpu_flags` list in `__init__` |
-| `main.py` | **MODIFY** — show setup screen before creating Game; loop CPU turns in `_do_end_turn()` |
+| `civ_game/systems/ai.py` | **CREATED** — all AI logic |
+| `civ_game/systems/score.py` | **CREATED** — `compute_score()` for scoreboard and win screen |
+| `civ_game/ui/setup_screen.py` | **CREATED** — pre-game player setup UI |
+| `civ_game/entities/civilization.py` | **MODIFIED** — added `is_cpu: bool = False` field |
+| `civ_game/game.py` | **MODIFIED** — accepts `cpu_flags` list in `__init__`; updated `PLAYER_NAMES` to civ names; expanded `CITY_NAMES` to 12 per civ |
+| `main.py` | **MODIFIED** — shows setup screen before Game creation; `_run_cpu_turns()` handles CPU turn loop with rendering, pause, and score recording; `_record_scores()` captures score history |
+| `spectate.py` | **CREATED** — AI spectator mode with simplified renderer |
+| `simulate.py` | **CREATED** — headless batch simulation |
 
 ---
 
@@ -878,13 +882,15 @@ def ai_take_turn(game, civ):
 
 ---
 
-## Modification 1 — Player Setup Screen (civ_game/ui/setup_screen.py)
+## Implemented: Player Setup Screen (civ_game/ui/setup_screen.py)
 
-A new full-screen UI shown **before** the Game object is created. The player toggles
+A full-screen UI shown **before** the Game object is created. The player toggles
 each of the 4 civs between Human and CPU, then clicks Start Game. Returns a list of
-4 bools (`cpu_flags`) that is passed to `Game.__init__`.
+4 bools (`cpu_flags`) passed to `Game.__init__`.
 
-### Visual layout (centered panel, ~500×380px on the 1850×1000 screen)
+Default: Rome = Human, Greece/The Huns/Babylon = CPU.
+
+### Visual layout (centered panel, 500×380px on the 1850×1000 screen)
 
 ```
 ┌─────────────────────────────────────┐
@@ -899,254 +905,49 @@ each of the 4 civs between Human and CPU, then clicks Start Game. Returns a list
 └─────────────────────────────────────┘
 ```
 
-- Each row has: colored square swatch + civ name + toggle button
-- Toggle button label/color: **Human** = blue-tinted `(40, 80, 140)` / **CPU** = gray `(70, 70, 90)`
-- Clicking the toggle button flips the state for that player
+- Each row: colored square swatch + civ name + toggle button
+- Toggle button: **Human** = blue `(40, 80, 140)` / **CPU** = gray `(70, 70, 90)`
 - Start Game button: green, centered at bottom of panel
-
-### Code — civ_game/ui/setup_screen.py
-
-```python
-import pygame
-import sys
-
-SCREEN_W = 1850
-SCREEN_H = 1000
-
-PANEL_W  = 500
-PANEL_H  = 380
-PANEL_X  = (SCREEN_W - PANEL_W) // 2
-PANEL_Y  = (SCREEN_H - PANEL_H) // 2
-
-# Matches game.py constants
-PLAYER_NAMES  = ["Rome", "Greece", "The Huns", "Babylon"]
-PLAYER_COLORS = [(220, 50, 50), (50, 100, 220), (50, 180, 50), (220, 180, 50)]
-
-COLOR_BG      = (20, 20, 30)
-COLOR_PANEL   = (30, 30, 45)
-COLOR_BORDER  = (100, 100, 140)
-COLOR_TEXT    = (230, 230, 230)
-COLOR_HUMAN   = (40,  80, 140)
-COLOR_HUMAN_H = (60, 110, 190)
-COLOR_CPU     = (70,  70,  90)
-COLOR_CPU_H   = (100, 100, 120)
-COLOR_START   = (50, 110, 50)
-COLOR_START_H = (70, 150, 70)
-
-_font_cache = {}
-
-def _font(size):
-    if size not in _font_cache:
-        _font_cache[size] = pygame.font.Font(None, size)
-    return _font_cache[size]
-
-
-def run_setup_screen(screen) -> list:
-    """
-    Blocking loop — renders the player setup screen and returns a list of
-    4 bools: cpu_flags[i] = True means player i is CPU-controlled.
-    Default: player 0 Human, players 1-3 CPU.
-    """
-    is_cpu = [False, True, True, True]
-    clock  = pygame.time.Clock()
-
-    while True:
-        mouse = pygame.mouse.get_pos()
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                # Check toggle buttons
-                for i in range(4):
-                    btn_rect = _toggle_rect(i)
-                    if btn_rect.collidepoint(event.pos):
-                        is_cpu[i] = not is_cpu[i]
-                # Check Start button
-                if _start_rect().collidepoint(event.pos):
-                    return is_cpu
-
-        _render(screen, is_cpu, mouse)
-        pygame.display.flip()
-        clock.tick(60)
-
-
-def _row_y(player_index) -> int:
-    """Top y of a player row inside the panel."""
-    return PANEL_Y + 80 + player_index * 64
-
-
-def _toggle_rect(player_index) -> pygame.Rect:
-    return pygame.Rect(PANEL_X + PANEL_W - 140, _row_y(player_index) + 4, 120, 36)
-
-
-def _start_rect() -> pygame.Rect:
-    return pygame.Rect(PANEL_X + PANEL_W // 2 - 100, PANEL_Y + PANEL_H - 66, 200, 44)
-
-
-def _render(screen, is_cpu, mouse):
-    screen.fill(COLOR_BG)
-
-    # Panel
-    pygame.draw.rect(screen, COLOR_PANEL, (PANEL_X, PANEL_Y, PANEL_W, PANEL_H))
-    pygame.draw.rect(screen, COLOR_BORDER, (PANEL_X, PANEL_Y, PANEL_W, PANEL_H), 2)
-
-    # Title
-    title = _font(34).render("CivPy  —  Player Setup", True, COLOR_TEXT)
-    screen.blit(title, title.get_rect(centerx=PANEL_X + PANEL_W // 2, top=PANEL_Y + 18))
-
-    # Divider
-    pygame.draw.line(screen, COLOR_BORDER,
-                     (PANEL_X + 16, PANEL_Y + 60), (PANEL_X + PANEL_W - 16, PANEL_Y + 60), 1)
-
-    # Player rows
-    for i in range(4):
-        row_y = _row_y(i)
-
-        # Color swatch
-        pygame.draw.rect(screen, PLAYER_COLORS[i], (PANEL_X + 24, row_y + 8, 22, 22))
-
-        # Name
-        name_surf = _font(26).render(PLAYER_NAMES[i], True, PLAYER_COLORS[i])
-        screen.blit(name_surf, (PANEL_X + 60, row_y + 10))
-
-        # Toggle button
-        btn_rect = _toggle_rect(i)
-        if is_cpu[i]:
-            btn_color = COLOR_CPU_H if btn_rect.collidepoint(mouse) else COLOR_CPU
-            label = "CPU"
-        else:
-            btn_color = COLOR_HUMAN_H if btn_rect.collidepoint(mouse) else COLOR_HUMAN
-            label = "Human"
-        pygame.draw.rect(screen, btn_color, btn_rect, border_radius=4)
-        pygame.draw.rect(screen, COLOR_BORDER, btn_rect, 1, border_radius=4)
-        lbl = _font(22).render(label, True, COLOR_TEXT)
-        screen.blit(lbl, lbl.get_rect(center=btn_rect.center))
-
-    # Start button
-    sr = _start_rect()
-    sc = COLOR_START_H if sr.collidepoint(mouse) else COLOR_START
-    pygame.draw.rect(screen, sc, sr, border_radius=5)
-    pygame.draw.rect(screen, COLOR_BORDER, sr, 1, border_radius=5)
-    start_lbl = _font(26).render("Start Game", True, COLOR_TEXT)
-    screen.blit(start_lbl, start_lbl.get_rect(center=sr.center))
-```
+- `run_setup_screen(screen) -> list[bool]` — blocking loop; returns `cpu_flags`
 
 ---
 
-## Modification 2 — civilization.py
+## Implemented: civilization.py changes
 
-Add `is_cpu` field:
-
-```python
-# In the Civilization @dataclass, add after is_eliminated:
-is_cpu: bool = False
-```
+Added `is_cpu: bool = False` field. The field is set by `Game.__init__` based on `cpu_flags`.
 
 ---
 
-## Modification 3 — game.py
+## Implemented: game.py changes
 
-Accept `cpu_flags` in `__init__` instead of hardcoding players 1–3 as CPU.
-This lets the setup screen control which players are human vs CPU.
+`Game.__init__` now accepts `cpu_flags=None` parameter. When provided, sets `civ.is_cpu` for each player. When `None`, defaults to players 1–3 as CPU.
 
-```python
-# Change signature:
-def __init__(self, num_players=4, map_cols=MAP_COLS, map_rows=MAP_ROWS,
-             seed=None, cpu_flags=None):
-    ...
-    self.civs = self._create_civs()
+`PLAYER_NAMES` updated to `["Rome", "Greece", "The Huns", "Babylon"]`.
 
-    # Apply CPU flags from setup screen
-    # cpu_flags is a list of bools, one per player.
-    # Default (None): all players except 0 are CPU.
-    if cpu_flags is not None:
-        for i, flag in enumerate(cpu_flags[:self.num_players]):
-            self.civs[i].is_cpu = flag
-    else:
-        for i in range(1, self.num_players):
-            self.civs[i].is_cpu = True
-    ...
-```
-
-Remove the old block that unconditionally marked players 1–3 as CPU.
+`CITY_NAMES` expanded to 12 names per civ (was 5).
 
 ---
 
-## Modification 4 — main.py
+## Implemented: main.py changes
 
-Two changes needed:
+### Setup screen integration
+`main()` calls `run_setup_screen(screen)` before creating the `Game` object, passing the returned `cpu_flags` list.
 
-### 4a — Show setup screen before creating the game
+### CPU turn loop: `_run_cpu_turns(game, ui_state)`
+Runs all consecutive CPU turns before returning to a human player. For each CPU civ:
+1. Processes pygame events (quit, P=pause, zoom, camera pan)
+2. Applies keyboard camera pan (arrow keys)
+3. If paused: renders and waits, then repeats without advancing
+4. Calls `ai_take_turn(game, civ)`
+5. Pans camera to that civ's capital (or first unit)
+6. Renders and flips display
+7. Waits `CPU_TURN_DELAY_MS = 10 ms`
+8. Calls `game.end_turn()` and `_record_scores()`
 
-In `main()`, replace:
-```python
-game = Game(num_players=4, map_cols=32, map_rows=20, seed=None)
-```
-with:
-```python
-from civ_game.ui.setup_screen import run_setup_screen
-cpu_flags = run_setup_screen(screen)   # blocks until player clicks Start
-game = Game(num_players=4, map_cols=32, map_rows=20, seed=None, cpu_flags=cpu_flags)
-```
+After the loop ends (human player reached or game won), shows the turn banner and centers the camera.
 
-### 4b — Loop CPU turns after human ends their turn
-
-In `_do_end_turn()`, after the existing code, add the CPU auto-play loop.
-
-Current `_do_end_turn` structure (lines 74–99):
-```python
-def _do_end_turn(game, ui_state):
-    from civ_game.map.hex_grid import hex_to_pixel, HEX_SIZE
-    game.end_turn()
-    ui_state.deselect()
-    ui_state.turn_banner_timer = 120
-
-    # ... camera centering ...
-    # ... pending_messages queuing ...
-```
-
-**Replace** the function body with:
-
-```python
-def _do_end_turn(game, ui_state):
-    from civ_game.map.hex_grid import hex_to_pixel, HEX_SIZE
-    from civ_game.systems.ai import ai_take_turn
-
-    game.end_turn()
-    ui_state.deselect()
-
-    # Auto-play all consecutive CPU turns before showing turn banner
-    while (not game.winner
-           and game.current_civ().is_cpu):
-        # Collect CPU messages so human sees them after their turn banner
-        ai_take_turn(game, game.current_civ())
-        game.end_turn()
-
-    # Now current_player is human (or game is won) — show turn banner
-    ui_state.turn_banner_timer = 120
-
-    # Center camera on the new (human) player's capital
-    new_civ = game.current_civ()
-    cap = new_civ.original_capital
-    if cap:
-        px, py = hex_to_pixel(cap.q, cap.r, hex_size=HEX_SIZE)
-        game.camera.center_on_pixel(px, py)
-    else:
-        settler = next((u for u in new_civ.units if u.unit_type == "settler"), None)
-        if settler:
-            px, py = hex_to_pixel(settler.q, settler.r, hex_size=HEX_SIZE)
-            game.camera.center_on_pixel(px, py)
-
-    # Queue start-of-turn messages (human player only)
-    if new_civ.pending_messages:
-        ui_state.queued_message = "\n".join(new_civ.pending_messages)
-        new_civ.pending_messages.clear()
-    if new_civ.research_just_completed:
-        ui_state.auto_open_tech = True
-        new_civ.research_just_completed = False
-```
+### Score recording: `_record_scores(game, ui_state)`
+Called after every `game.end_turn()`. Appends `[compute_score(c, game) for c in game.civs]` to `ui_state.score_history` once per unique game turn.
 
 ---
 
@@ -1169,7 +970,7 @@ ai.py
 └── ai_take_turn(game, civ)          ← public entry point
 ```
 
-Total: approximately 280–320 lines.
+Total: approximately 600 lines.
 
 ---
 
@@ -1182,42 +983,12 @@ Total: approximately 280–320 lines.
 
 ---
 
-## Verification Steps
+## Known Behavior
 
-```
-cd /workspace/civ_lite_py && python main.py
-```
-
-1. **Setup screen appears**: Before the map loads, a panel shows 4 player rows each
-   with a Human/CPU toggle. Default: Rome = Human, others = CPU.
-
-2. **Toggles work**: Clicking a toggle button switches Human ↔ CPU. Color and label
-   update immediately.
-
-3. **Start Game launches correctly**: Clicking Start Game creates the game with the
-   chosen configuration and shows the map.
-
-4. **All-human hot-seat**: Set all 4 to Human. Each player takes turns manually with
-   no auto-play. Turn banner cycles normally.
-
-5. **All-CPU watch mode**: Set all 4 to CPU. After clicking Start, hitting End Turn
-   once should simulate all turns until a winner (no human banner wait needed —
-   the `while is_cpu` loop runs to game end).
-
-6. **CPU takes turns**: With default setup (Rome human, others CPU), press Enter →
-   turn banner should cycle through CPU players instantly and return to Rome.
-
-7. **CPU founds cities**: After ~5–10 turns, CPU civs should have founded at least
-   1 city each.
-
-8. **CPU trains units**: After ~15 turns, CPU civs should have 2+ military units each.
-
-9. **CPU attacks**: After ~20–30 turns, aggressive civs (Huns) should attack human
-   or neighboring civs if they have a strength advantage.
-
-10. **CPU researches techs**: Observe CPU units upgrading to archer/spearman/swordsman
-    class over time.
-
-11. **Personality differences**: Huns should be noticeably more aggressive than Babylon
-   (attacks earlier, fewer buildings). Greece should have more science buildings.
-```
+- All-human hot-seat: set all 4 to Human; each player takes turns manually
+- All-CPU watch: set all 4 to CPU; the AI loop runs continuously (no human banner)
+- CPU founds cities within ~5–10 turns
+- CPU trains 2+ military units within ~15 turns
+- Huns attack earlier and more aggressively than Babylon or Greece
+- Greece builds more science buildings and attacks later with stronger units
+- `spectate.py` and `simulate.py` can be used to observe and benchmark AI behavior
