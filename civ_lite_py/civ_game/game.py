@@ -414,6 +414,9 @@ class Game:
         unit.q, unit.r = tq, tr
         new_tile = self.tiles.get((tq, tr))
         if new_tile:
+            # Capture enemy civilian on destination tile
+            if new_tile.civilian and new_tile.civilian.owner != unit.owner:
+                self.remove_unit(new_tile.civilian)
             new_tile.unit = unit
 
     def _capture_city(self, attacker: Unit, city):

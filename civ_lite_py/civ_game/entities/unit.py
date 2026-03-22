@@ -77,9 +77,8 @@ def get_reachable_tiles(unit: Unit, tiles: dict, turn: int = 99) -> dict:
                 # Enemy military: attack target only, blocks movement
                 if tile.unit and tile.unit.owner != unit.owner:
                     continue
-                # Enemy city: can BFS through (to reach beyond) but can't end here
+                # Enemy city: blocks movement entirely
                 if tile.city and tile.city.owner != unit.owner:
-                    queue.append(((nq, nr), cost))
                     continue
                 # Enemy civilian: can capture (move there) but can't pass through
                 # Exception: settlers are untouchable on turn 1
@@ -112,8 +111,6 @@ def get_attackable_tiles(unit: Unit, tiles: dict) -> set:
                 continue
             if tile.unit and tile.unit.owner != unit.owner:
                 targets.add((nq, nr))
-            elif tile.civilian and tile.civilian.owner != unit.owner:
-                targets.add((nq, nr))
             elif tile.city and tile.city.owner != unit.owner:
                 targets.add((nq, nr))
     else:
@@ -123,8 +120,6 @@ def get_attackable_tiles(unit: Unit, tiles: dict) -> set:
             if dist == 0 or dist > attack_range:
                 continue
             if tile.unit and tile.unit.owner != unit.owner:
-                targets.add((tq, tr))
-            elif tile.civilian and tile.civilian.owner != unit.owner:
                 targets.add((tq, tr))
             elif tile.city and tile.city.owner != unit.owner:
                 targets.add((tq, tr))

@@ -136,10 +136,8 @@ def render_city_screen(screen, city, civ, ui_state):
         req_res = defn.get("requires_resource")
         if req_res:
             has_res = any(
-                _city_screen_tiles.get((tq, tr)) and
-                _city_screen_tiles[(tq, tr)].resource == req_res
-                for c in civ.cities
-                for tq, tr in c.worked_tiles
+                t.resource == req_res and t.owner == civ.player_index
+                for t in _city_screen_tiles.values()
             )
             if not has_res:
                 continue

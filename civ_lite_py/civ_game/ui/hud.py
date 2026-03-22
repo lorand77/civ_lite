@@ -173,7 +173,7 @@ def _draw_unit_info(screen, unit, game, lx, base_y, lh):
                 hints.append("A=Farm")
                 if "animal_husbandry" in civ.techs_researched:
                     hints.append("P=Pasture")
-            if tile.terrain == "hills":
+            if tile.terrain in ("hills", "forest"):
                 if "mining" in civ.techs_researched:
                     hints.append("M=Mine")
         screen.blit(_font(20).render("Build:  " + "  ".join(hints) if hints else "No improvements available",

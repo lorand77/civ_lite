@@ -37,7 +37,7 @@ TECH_DEFS = {
         "prerequisites": [],
         "unlocks_units": [],
         "unlocks_buildings": ["granary"],
-        "unlocks_improvements": ["farm"],
+        "unlocks_improvements": [],
         "reveals_resources": [],
     },
     "bronze_working": {
