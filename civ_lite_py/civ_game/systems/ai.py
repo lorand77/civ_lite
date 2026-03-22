@@ -280,19 +280,29 @@ def _act_military_unit(game, civ, unit, roles, attack_target, danger):
             best_score = score
             best_action = ("move", tq, tr, cost)
 
-    # 3. Score fortify
-    fortify_score = 5
+    # 3. Score fortify (defense bonus, no healing)
     tile = game.tiles.get((unit.q, unit.r))
-    if tile and tile.city and tile.city.owner == civ.player_index:
+    in_city = tile and tile.city and tile.city.owner == civ.player_index
+    fortify_score = 5
+    if in_city:
         fortify_score += 10
     if role == "DEFENDER":
         fortify_score += 15
-    if unit.hp < 50:
-        fortify_score += 20
 
     if fortify_score > best_score:
         best_score = fortify_score
         best_action = ("fortify",)
+
+    # 4. Score heal (recover HP, loses fortify bonus)
+    hp_max = defn["hp_max"]
+    if unit.hp < hp_max:
+        missing = hp_max - unit.hp
+        heal_score = missing * 0.5  # up to +50 at 0 HP
+        if in_city:
+            heal_score += 5
+        if heal_score > best_score:
+            best_score = heal_score
+            best_action = ("heal",)
 
     # Execute best action
     if not best_action:
@@ -310,6 +320,13 @@ def _act_military_unit(game, civ, unit, roles, attack_target, danger):
 
     elif best_action[0] == "fortify":
         unit.fortified = True
+        unit.healing = False
+        unit.moves_left = 0
+
+    elif best_action[0] == "heal":
+        unit.healing = True
+        unit.fortified = False
+        unit.fortify_bonus = 0.0
         unit.moves_left = 0
 
 
