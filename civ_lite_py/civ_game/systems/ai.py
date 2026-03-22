@@ -633,6 +633,36 @@ def _act_gold(game, civ):
 
 
 # ---------------------------------------------------------------------------
+# Component 11 — Unit Upgrades
+# ---------------------------------------------------------------------------
+def _act_upgrades(game, civ):
+    """Upgrade military units when affordable and the strength gain is worthwhile."""
+    flavors = LEADER_FLAVORS[civ.player_index]
+    # Keep a gold reserve so we don't bankrupt ourselves upgrading
+    gold_reserve = int(40 / flavors["aggression"])
+
+    for unit in list(civ.units):
+        if unit.is_civilian or unit.moves_left == 0:
+            continue
+        path = UNIT_UPGRADES.get(unit.unit_type)
+        if not path:
+            continue
+        target_type, gold_cost = path
+        if civ.gold - gold_cost < gold_reserve:
+            continue
+        tdef = UNIT_DEFS[target_type]
+        # Only upgrade if the strength gain is meaningful
+        old_str = UNIT_DEFS[unit.unit_type]["strength"]
+        new_str = tdef["strength"]
+        if new_str <= old_str:
+            continue
+        ok, _ = game.upgrade_unit(unit)
+        if ok:
+            # Unit spent its moves; continue to next unit
+            continue
+
+
+# ---------------------------------------------------------------------------
 # Main AI Entry Point
 # ---------------------------------------------------------------------------
 def ai_take_turn(game, civ):
@@ -651,6 +681,9 @@ def ai_take_turn(game, civ):
     # City production
     for city in civ.cities:
         _act_city(game, civ, city, attack_target)
+
+    # Upgrade units before acting (so they fight with new stats)
+    _act_upgrades(game, civ)
 
     # Civilians first (settlers, workers), then military
     for unit in list(civ.units):
