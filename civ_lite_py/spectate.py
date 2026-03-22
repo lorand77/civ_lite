@@ -25,6 +25,7 @@ from civ_game.game import Game, PLAYER_COLORS, PLAYER_NAMES
 from civ_game.map.hex_grid import hex_to_pixel, hex_corners
 from civ_game.data.units import UNIT_DEFS
 from civ_game.systems.ai import ai_take_turn
+from civ_game.systems.score import compute_score
 
 # ── constants ────────────────────────────────────────────────────────────────
 
@@ -154,6 +155,8 @@ def draw_entities(surface, game, hex_size, offset_x, offset_y):
         if civ.is_eliminated:
             continue
         for unit in civ.units:
+            if unit.is_civilian:
+                continue
             if (unit.q, unit.r) not in city_hexes:
                 hex_units[(unit.q, unit.r)].append((civ.player_index, unit))
 
@@ -171,11 +174,6 @@ def draw_entities(surface, game, hex_size, offset_x, offset_y):
             dx, dy = STACK_OFFSETS[idx % len(STACK_OFFSETS)]
             ux = int(cx + dx)
             uy = int(cy + dy)
-
-            if utype == "civilian":
-                # Small grey dot
-                pygame.draw.circle(overlay, (160, 160, 160, 130), (ux, uy), 3)
-                continue
 
             radius = max(8, int(strength * 0.9))
             col = PLAYER_COLORS[pid]
@@ -215,7 +213,8 @@ def draw_hud(surface, game, speed_idx, paused, font_sm, font_md):
             label = f"{PLAYER_NAMES[civ.player_index]}: eliminated"
             txt = font_sm.render(label, True, (120, 120, 120))
         else:
-            label = f"{PLAYER_NAMES[civ.player_index]}  C:{city_count}  U:{unit_count}"
+            score = compute_score(civ, game)
+            label = f"{PLAYER_NAMES[civ.player_index]}  C:{city_count}  U:{unit_count}  {score}pt"
             txt = font_sm.render(label, True, col)
         surface.blit(txt, (x, (HUD_H - txt.get_height()) // 2))
 
@@ -224,10 +223,32 @@ def draw_hud(surface, game, speed_idx, paused, font_sm, font_md):
     status = "PAUSED" if paused else speed_label
     status_col = (255, 200, 50) if paused else (160, 220, 160)
     st = font_md.render(status, True, status_col)
-    surface.blit(st, (SCREEN_W - st.get_width() - 150, (HUD_H - st.get_height()) // 2))
+    st_x = SCREEN_W - st.get_width() - 10
+    surface.blit(st, (st_x, (HUD_H - st.get_height()) // 2))
 
     hint = font_sm.render("SPC=pause  +/-=speed  ESC=quit", True, (100, 100, 110))
-    surface.blit(hint, (SCREEN_W - hint.get_width() - 10, (HUD_H - hint.get_height()) // 2))
+    surface.blit(hint, (st_x - hint.get_width() - 16, (HUD_H - hint.get_height()) // 2))
+
+
+def draw_score_bars(surface, game):
+    """Small horizontal bar chart in the bottom-right corner, no text."""
+    BAR_H     = 14
+    BAR_GAP   = 3
+    MAX_W     = 220
+    PAD       = 12
+
+    scores = [compute_score(civ, game) for civ in game.civs]
+    max_score = max(scores) if any(scores) else 1
+
+    total_h = len(game.civs) * BAR_H + (len(game.civs) - 1) * BAR_GAP
+    x0 = SCREEN_W - MAX_W - PAD
+    y0 = SCREEN_H - total_h - PAD
+
+    for i, civ in enumerate(game.civs):
+        bar_w = int(MAX_W * scores[i] / max_score)
+        y = y0 + i * (BAR_H + BAR_GAP)
+        col = PLAYER_COLORS[civ.player_index]
+        pygame.draw.rect(surface, col, (x0, y, bar_w, BAR_H))
 
 
 def draw_win_screen(surface, winner_id, turn, font_lg, font_md):
@@ -305,6 +326,7 @@ def main():
         draw_terrain(screen, game, hex_size, offset_x, offset_y)
         draw_entities(screen, game, hex_size, offset_x, offset_y)
         draw_hud(screen, game, speed_idx, paused, font_sm, font_md)
+        draw_score_bars(screen, game)
 
         if game_over:
             draw_win_screen(screen, game.winner, game.turn, font_lg, font_md)

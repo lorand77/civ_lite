@@ -9,6 +9,7 @@ from civ_game.map.terrain import RESOURCES
 from civ_game.ui.hud import render_hud
 from civ_game.ui.city_screen import render_city_screen, set_tiles
 from civ_game.ui.tech_screen import render_tech_screen
+from civ_game.systems.score import compute_score
 
 _ASSETS_DIR = os.path.join(os.path.dirname(__file__), "..", "assets")
 
@@ -416,33 +417,6 @@ def _render_turn_banner(screen, game):
     screen.blit(sub,   sub.get_rect(center=(cx, cy + title.get_height() // 2 + 10)))
 
 
-def compute_score(civ, game) -> int:
-    if civ.is_eliminated:
-        return 0
-
-    from civ_game.data.buildings import BUILDING_DEFS
-    from civ_game.data.units import UNIT_DEFS as _UD
-
-    score = 0
-    score += len(civ.cities) * 50
-    score += sum(c.population for c in civ.cities) * 20
-    score += sum(_UD[u.unit_type]["strength"] for u in civ.units if not u.is_civilian) * 3
-    score += len(civ.techs_researched) * 20
-    score += sum(1 for t in game.tiles.values() if t.owner == civ.player_index)
-    score += civ.gold // 10
-
-    for city in civ.cities:
-        for b_key in city.buildings:
-            defn = BUILDING_DEFS[b_key]
-            effects = defn.get("effects", {})
-            score += effects.get("food_per_turn",    0) * 4
-            score += effects.get("prod_per_turn",    0) * 5
-            score += effects.get("gold_per_turn",    0) * 3
-            score += effects.get("science_per_turn", 0) * 6
-            score += effects.get("culture_per_turn", 0) * 2
-            score += defn.get("defense", 0) * 8
-
-    return score
 
 
 def _render_scoreboard(screen, game):
