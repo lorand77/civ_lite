@@ -183,9 +183,11 @@ class Game:
 
     def _place_starting_units(self):
         from civ_game.map.hex_grid import hex_neighbors
+        quadrants = list(range(self.num_players))
+        self._rng.shuffle(quadrants)
         taken_positions = []
         for i, civ in enumerate(self.civs):
-            pos = self._find_start_tile(i, taken_positions)
+            pos = self._find_start_tile(quadrants[i], taken_positions)
             if not pos:
                 continue
             q, r = pos
