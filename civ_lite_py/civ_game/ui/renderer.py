@@ -291,6 +291,11 @@ def render(screen, game, camera, ui_state):
                 pygame.draw.circle(screen, (80, 220, 80), (ux, uy), r_unit + 2, 2)
             lbl = _font(22).render(unit.label, True, (255, 255, 255))
             screen.blit(lbl, (ux - lbl.get_width() // 2, uy - lbl.get_height() // 2))
+            # Gold star for special units
+            from civ_game.data.civs import is_special_unit as _is_su
+            if _is_su(unit.owner, unit.unit_type):
+                star = _font(18).render("\u2605", True, (255, 215, 0))
+                screen.blit(star, (ux + r_unit - 2, uy - r_unit - 6))
             # Grey out if no moves left (current player only)
             if unit.moves_left == 0 and unit.owner == game.current_player:
                 dim = pygame.Surface((r_unit * 2, r_unit * 2), pygame.SRCALPHA)
