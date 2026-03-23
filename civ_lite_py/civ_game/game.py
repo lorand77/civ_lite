@@ -1,5 +1,5 @@
 import numpy as np
-from civ_game.map.hex_grid import HEX_SIZE, hex_to_pixel, hexes_in_range
+from civ_game.map.hex_grid import HEX_SIZE, hex_to_pixel, hexes_in_range, hex_distance
 from civ_game.map.generator import generate_map
 from civ_game.map.terrain import TERRAIN_PASSABLE, TERRAIN_YIELDS, RESOURCES
 from civ_game.entities.civilization import Civilization
@@ -275,6 +275,21 @@ class Game:
                     if not (self.turn <= 1 and new_tile.civilian.unit_type == "settler"):
                         self.remove_unit(new_tile.civilian)
                 new_tile.unit = unit
+
+    def can_found_city(self, unit: Unit) -> tuple[bool, str]:
+        """Check whether a settler can found a city at its current position."""
+        tile = self.tiles.get((unit.q, unit.r))
+        if not tile or tile.terrain == "ocean" or tile.city is not None:
+            return False, "Cannot settle here."
+        # Cannot settle in enemy territory
+        if tile.owner is not None and tile.owner != unit.owner:
+            return False, "Cannot settle in enemy territory."
+        # Must be at least 3 tiles from any existing city
+        for civ in self.civs:
+            for city in civ.cities:
+                if hex_distance(unit.q, unit.r, city.q, city.r) <= 2:
+                    return False, "Too close to an existing city."
+        return True, ""
 
     def found_city(self, unit: Unit):
         """Settler founds a city at its current position."""

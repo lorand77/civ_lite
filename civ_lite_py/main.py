@@ -296,11 +296,13 @@ def _handle_key(key, game, ui_state):
             ui_state.deselect()
 
     elif key == pygame.K_f and unit and unit.unit_type == "settler":
-        tile = game.tiles.get((unit.q, unit.r))
-        if tile and tile.terrain != "ocean" and tile.city is None:
+        ok, msg = game.can_found_city(unit)
+        if ok:
             city = game.found_city(unit)
             ui_state.deselect()
             ui_state.selected_city = city
+        elif msg:
+            ui_state.set_message(msg)
 
     elif key == pygame.K_m and unit and unit.unit_type == "worker":
         game.start_improvement(unit, "mine")

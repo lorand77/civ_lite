@@ -335,6 +335,16 @@ def _act_military_unit(game, civ, unit, roles, attack_target, danger):
 # ---------------------------------------------------------------------------
 def _score_settle_tile(q, r, game, civ) -> float:
     from civ_game.map.terrain import TERRAIN_YIELDS
+
+    # Hard reject: enemy territory or too close to any city
+    tile = game.tiles.get((q, r))
+    if tile and tile.owner is not None and tile.owner != civ.player_index:
+        return -9999
+    for oc in game.civs:
+        for city in oc.cities:
+            if hex_distance(q, r, city.q, city.r) <= 2:
+                return -9999
+
     score = 0.0
 
     for (tq, tr) in hexes_in_range(q, r, 2):
@@ -361,8 +371,8 @@ def _act_settler(game, civ, settler):
     if settler.moves_left == 0:
         return
 
-    tile = game.tiles.get((settler.q, settler.r))
-    if tile and tile.terrain != "ocean" and tile.city is None:
+    ok, _ = game.can_found_city(settler)
+    if ok:
         found_score = _score_settle_tile(settler.q, settler.r, game, civ)
         if found_score > 30:
             game.found_city(settler)
@@ -377,6 +387,12 @@ def _act_settler(game, civ, settler):
     for (tq, tr), cost in reachable.items():
         tile = game.tiles.get((tq, tr))
         if not tile or tile.terrain == "ocean" or tile.city:
+            continue
+        # Skip tiles that are in enemy territory or too close to existing cities
+        if tile.owner is not None and tile.owner != civ.player_index:
+            continue
+        if any(hex_distance(tq, tr, c.q, c.r) <= 2
+               for oc in game.civs for c in oc.cities):
             continue
         s = _score_settle_tile(tq, tr, game, civ)
         s *= flavors["expansion"]
