@@ -208,7 +208,7 @@ def draw_hud(surface, game, speed_idx, paused, font_sm, font_md):
         col = PLAYER_COLORS[civ.player_index]
         x = start_x + civ.player_index * block_w
         city_count = len(civ.cities)
-        unit_count = len(civ.units)
+        unit_count = sum(1 for u in civ.units if not u.is_civilian)
         if civ.is_eliminated:
             label = f"{PLAYER_NAMES[civ.player_index]}: eliminated"
             txt = font_sm.render(label, True, (120, 120, 120))

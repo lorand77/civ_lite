@@ -273,7 +273,8 @@ def _handle_key(key, game, ui_state):
 
     elif key == pygame.K_t:
         ui_state.tech_screen_open = not ui_state.tech_screen_open
-        ui_state.city_screen_open = False  # close city screen if open
+        ui_state.city_screen_open = False
+        ui_state.stats_screen_open = False
 
     elif key == pygame.K_b:
         # Open city screen for selected city, or city on selected unit's tile
@@ -287,8 +288,15 @@ def _handle_key(key, game, ui_state):
             ui_state.city_screen_open = True
             ui_state.city_screen_scroll = 0
 
+    elif key == pygame.K_s:
+        ui_state.stats_screen_open = not ui_state.stats_screen_open
+        ui_state.tech_screen_open = False
+        ui_state.city_screen_open = False
+
     elif key == pygame.K_ESCAPE:
-        if ui_state.tech_screen_open:
+        if ui_state.stats_screen_open:
+            ui_state.stats_screen_open = False
+        elif ui_state.tech_screen_open:
             ui_state.tech_screen_open = False
         elif ui_state.city_screen_open:
             ui_state.city_screen_open = False

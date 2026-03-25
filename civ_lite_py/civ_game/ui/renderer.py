@@ -6,7 +6,7 @@ from civ_game.map.terrain import TERRAIN_COLORS, RESOURCE_COLORS
 from civ_game.data.units import UNIT_DEFS
 from civ_game.entities.improvement import IMPROVEMENT_DEFS
 from civ_game.map.terrain import RESOURCES
-from civ_game.ui.hud import render_hud
+from civ_game.ui.hud import render_hud, render_stats_screen
 from civ_game.ui.city_screen import render_city_screen, set_tiles
 from civ_game.ui.tech_screen import render_tech_screen
 from civ_game.systems.score import compute_score
@@ -322,7 +322,11 @@ def render(screen, game, camera, ui_state):
     if ui_state.tech_screen_open:
         render_tech_screen(screen, game.current_civ(), ui_state)
 
-    # --- Layer 11: City screen ---
+    # --- Layer 11: Stats screen ---
+    if ui_state.stats_screen_open:
+        render_stats_screen(screen, game)
+
+    # --- Layer 13: City screen ---
     if ui_state.city_screen_open and ui_state.selected_city:
         set_tiles(game.tiles)
         render_city_screen(screen, ui_state.selected_city,

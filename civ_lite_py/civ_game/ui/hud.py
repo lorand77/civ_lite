@@ -50,6 +50,7 @@ class UIState:
     score_history: list = field(default_factory=list)  # [[s0,s1,s2,s3], ...] per game turn
     _last_recorded_turn: int = 0
     paused: bool = False
+    stats_screen_open: bool = False
 
     def set_message(self, msg: str, duration: int = 180):
         self.message = msg
@@ -123,7 +124,7 @@ def render_hud(screen, game, ui_state):
     screen.blit(_font(20).render(sci_str, True, sci_color), (rx, base_y + lh * 2))
 
     screen.blit(_font(20).render(
-        "Arrows/MMB=pan  F=found  B=city  M/A/P=improve  K=fortify  H=heal  T=tech  Enter=end",
+        "Arrows/MMB=pan  F=found  B=city  M/A/P=improve  K=fortify  H=heal  T=tech  S=stats  Enter=end",
         True, COLOR_TEXT_DIM), (rx, base_y + lh * 3))
 
     # END TURN button
@@ -274,3 +275,123 @@ def _draw_hp_bar(screen, x, y, hp, max_hp, width=100):
     pygame.draw.rect(screen, (80, 30, 30), (x, y, width, 8))
     pygame.draw.rect(screen, (200, 60, 60), (x, y, filled, 8))
     pygame.draw.rect(screen, (120, 120, 120), (x, y, width, 8), 1)
+
+
+def render_stats_screen(screen, game):
+    from civ_game.data.units import UNIT_DEFS
+    from civ_game.systems.score import compute_score
+    from civ_game.systems.yields import compute_city_yields
+
+    WIN_W = 700
+    WIN_H = 440
+    WIN_X = (SCREEN_W - WIN_W) // 2
+    WIN_Y = (SCREEN_H - WIN_H) // 2
+
+    LABEL_W = 140
+    CIV_COL_W = (WIN_W - LABEL_W) // 4
+    ROW_H = 36
+    HDR_H = 44
+
+    bg = pygame.Surface((WIN_W, WIN_H), pygame.SRCALPHA)
+    bg.fill((20, 20, 30, 235))
+    screen.blit(bg, (WIN_X, WIN_Y))
+    pygame.draw.rect(screen, (100, 100, 130), (WIN_X, WIN_Y, WIN_W, WIN_H), 2)
+
+    font_hdr = _font(22)
+    font_lbl = _font(20)
+    font_val = _font(20)
+
+    # Civ name headers
+    for civ in game.civs:
+        cx = WIN_X + LABEL_W + civ.player_index * CIV_COL_W + CIV_COL_W // 2
+        col = PLAYER_COLORS[civ.player_index] if not civ.is_eliminated else (90, 90, 90)
+        label = civ.name if not civ.is_eliminated else f"{civ.name} (eliminated)"
+        txt = font_hdr.render(label, True, col)
+        screen.blit(txt, txt.get_rect(centerx=cx, y=WIN_Y + 10))
+
+    pygame.draw.line(screen, (80, 80, 110),
+                     (WIN_X + 8, WIN_Y + HDR_H),
+                     (WIN_X + WIN_W - 8, WIN_Y + HDR_H), 1)
+
+    # Compute stats for each civ
+    civ_stats = []
+    for civ in game.civs:
+        if civ.is_eliminated:
+            civ_stats.append(None)
+            continue
+        mil_str = sum(UNIT_DEFS[u.unit_type]["strength"] for u in civ.units if not u.is_civilian)
+        territory = sum(1 for t in game.tiles.values() if t.owner == civ.player_index)
+        cap_hp = civ.original_capital.hp if civ.original_capital else 0
+        gpt = sum(compute_city_yields(c, game.tiles, civ)["gold"] for c in civ.cities)
+        spt = sum(compute_city_yields(c, game.tiles, civ)["science"] for c in civ.cities)
+        civ_stats.append({
+            "mil_str":   mil_str,
+            "gold":      civ.gold,
+            "gpt":       gpt,
+            "cities":    len(civ.cities),
+            "pop":       sum(c.population for c in civ.cities),
+            "sci_pt":    spt,
+            "techs":     len(civ.techs_researched),
+            "territory": territory,
+            "score":     compute_score(civ, game),
+            "cap_hp":    cap_hp,
+        })
+
+    ROWS = [
+        ("Military Strength", "mil_str",   (255, 120, 120)),
+        ("Gold",              "gold",      (255, 215,   0)),
+        ("Gold / Turn",       "gpt",       (220, 185,   0)),
+        ("Cities",            "cities",    (180, 220, 255)),
+        ("Population",        "pop",       (140, 220, 140)),
+        ("Science / Turn",    "sci_pt",    (120, 180, 255)),
+        ("Techs Researched",  "techs",     (200, 140, 255)),
+        ("Territory",         "territory", (160, 200, 160)),
+        ("Score",             "score",     (255, 200,  80)),
+        ("Capital HP",        "cap_hp",    (255, 100, 100)),
+    ]
+
+    for row_i, (label, key, color) in enumerate(ROWS):
+        y = WIN_Y + HDR_H + 4 + row_i * ROW_H
+        if row_i % 2 == 0:
+            stripe = pygame.Surface((WIN_W - 4, ROW_H - 2), pygame.SRCALPHA)
+            stripe.fill((255, 255, 255, 12))
+            screen.blit(stripe, (WIN_X + 2, y))
+
+        lbl = font_lbl.render(label, True, (180, 180, 180))
+        screen.blit(lbl, (WIN_X + 10, y + (ROW_H - lbl.get_height()) // 2))
+
+        # Find the leading value among active civs
+        active_vals = [civ_stats[c.player_index][key] for c in game.civs if not c.is_eliminated]
+        best_val = max(active_vals) if active_vals else None
+
+        for civ in game.civs:
+            cx = WIN_X + LABEL_W + civ.player_index * CIV_COL_W + CIV_COL_W // 2
+            if civ.is_eliminated:
+                val_str = "—"
+                val_col = (80, 80, 80)
+            else:
+                v = civ_stats[civ.player_index][key]
+                is_leader = (best_val is not None and v == best_val)
+
+                # Gold highlight behind leading cell
+                if is_leader:
+                    hl = pygame.Surface((CIV_COL_W - 4, ROW_H - 4), pygame.SRCALPHA)
+                    hl.fill((255, 200, 0, 40))
+                    screen.blit(hl, (WIN_X + LABEL_W + civ.player_index * CIV_COL_W + 2, y + 2))
+
+                if key == "gpt" and v > 0:
+                    val_str = f"+{v}"
+                    val_col = (100, 220, 100)
+                elif key == "gpt" and v < 0:
+                    val_str = str(v)
+                    val_col = (255, 80, 80)
+                else:
+                    val_str = str(v)
+                    val_col = (255, 230, 100) if is_leader else color
+
+            txt = font_val.render(val_str, True, val_col)
+            screen.blit(txt, txt.get_rect(centerx=cx, centery=y + ROW_H // 2))
+
+    hint = _font(18).render("S / ESC — close", True, (100, 100, 120))
+    screen.blit(hint, (WIN_X + WIN_W - hint.get_width() - 10,
+                       WIN_Y + WIN_H - hint.get_height() - 6))
