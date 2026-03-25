@@ -143,12 +143,14 @@ def _select_attack_target(game, civ):
 # ---------------------------------------------------------------------------
 # Component 4 — Unit Role Assignment
 # ---------------------------------------------------------------------------
-def _assign_roles(civ, danger, attack_target) -> dict:
+def _assign_roles(civ, danger, attack_target) -> tuple:
     """
-    Returns {unit_id: role_str} plus {unit_id + 10000: assigned_city} for defenders.
-    Roles: "DEFENDER", "ATTACKER", "PATROL"
+    Returns (roles, defender_cities):
+      roles:           {id(unit): role_str}   — "DEFENDER", "ATTACKER", or "PATROL"
+      defender_cities:  {id(unit): city}       — which city a DEFENDER is assigned to
     """
     roles = {}
+    defender_cities = {}
 
     threatened_cities = [
         c for c in civ.cities
@@ -175,20 +177,20 @@ def _assign_roles(civ, danger, attack_target) -> dict:
         dist = hex_distance(unit.q, unit.r, nearest.q, nearest.r)
         if dist <= 6 and id(nearest) not in assigned_defender_cities:
             roles[id(unit)] = "DEFENDER"
-            roles[id(unit) + 10000] = nearest
+            defender_cities[id(unit)] = nearest
             assigned_defender_cities.add(id(nearest))
 
     for unit in military_units:
         if id(unit) not in roles:
             roles[id(unit)] = "ATTACKER" if attack_target else "PATROL"
 
-    return roles
+    return roles, defender_cities
 
 
 # ---------------------------------------------------------------------------
 # Component 5 — Military Unit Action
 # ---------------------------------------------------------------------------
-def _act_military_unit(game, civ, unit, roles, attack_target, danger):
+def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger):
     if unit.moves_left == 0:
         return
 
@@ -247,7 +249,7 @@ def _act_military_unit(game, civ, unit, roles, attack_target, danger):
         score = 0
 
         if role == "DEFENDER":
-            assigned_city = roles.get(id(unit) + 10000)
+            assigned_city = defender_cities.get(id(unit))
             if assigned_city:
                 current_dist = hex_distance(unit.q, unit.r, assigned_city.q, assigned_city.r)
                 new_dist = hex_distance(tq, tr, assigned_city.q, assigned_city.r)
@@ -712,7 +714,7 @@ def ai_take_turn(game, civ):
     # Strategic layer
     danger        = _build_danger_map(game, civ)
     attack_target = _select_attack_target(game, civ)
-    roles         = _assign_roles(civ, danger, attack_target)
+    roles, defender_cities = _assign_roles(civ, danger, attack_target)
 
     # Research
     _pick_research(game, civ)
@@ -736,7 +738,7 @@ def ai_take_turn(game, civ):
     for unit in list(civ.units):
         if unit.is_civilian:
             continue
-        _act_military_unit(game, civ, unit, roles, attack_target, danger)
+        _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger)
 
     # Gold / buy
     _act_gold(game, civ)

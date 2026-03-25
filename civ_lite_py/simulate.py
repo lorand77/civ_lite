@@ -2,7 +2,7 @@ from collections import Counter
 from civ_game.game import Game, PLAYER_NAMES
 from civ_game.systems.ai import ai_take_turn
 
-NUM_GAMES   = 100
+NUM_GAMES   = 1000
 MAX_TURNS   = 2000  # safety cap — prevents infinite loops on rare stalemates
 NUM_PLAYERS = 4
 
