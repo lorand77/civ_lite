@@ -1,7 +1,6 @@
 from civ_game.map.terrain import TERRAIN_YIELDS, RESOURCES
 from civ_game.entities.improvement import IMPROVEMENT_DEFS
 from civ_game.data.buildings import BUILDING_DEFS
-from civ_game.data.civs import CIV_TRAITS
 
 
 def compute_city_yields(city, tiles, civ):
@@ -49,21 +48,5 @@ def compute_city_yields(city, tiles, civ):
 
     # Base science: 1 per city + 1 per citizen
     totals["science"] += 1 + city.population
-
-    # Civ-specific yield bonuses
-    traits = CIV_TRAITS.get(civ.player_index, {})
-
-    # Greece: +1 culture per city per turn
-    totals["culture"] += traits.get("city_culture_bonus", 0)
-
-    # Special buildings (e.g. Babylon library +6 science)
-    for b_key in city.buildings:
-        sb = traits.get("special_buildings", {}).get(b_key, {})
-        totals["science"] += sb.get("science_per_turn_add", 0)
-
-    # Science multiplier (e.g. Babylon +10%)
-    science_bonus = traits.get("science_bonus", 0.0)
-    if science_bonus:
-        totals["science"] = int(totals["science"] * (1 + science_bonus))
 
     return totals

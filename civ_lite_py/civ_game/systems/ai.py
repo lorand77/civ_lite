@@ -10,10 +10,6 @@ from civ_game.systems.production import get_item_cost
 from civ_game.data.units import UNIT_DEFS, UNIT_UPGRADES
 from civ_game.data.buildings import BUILDING_DEFS
 from civ_game.data.techs import TECH_DEFS
-from civ_game.data.civs import (
-    CIV_TRAITS, get_effective_base_strength, get_unit_move_bonus,
-    is_special_unit, is_special_building,
-)
 
 # ---------------------------------------------------------------------------
 # Leader flavor weights — same code, different playstyles
@@ -66,8 +62,8 @@ def _build_danger_map(game, civ) -> dict:
             if unit.is_civilian:
                 continue
             defn = UNIT_DEFS[unit.unit_type]
-            strength = get_effective_base_strength(other.player_index, unit.unit_type)
-            move_range = defn["moves"] + get_unit_move_bonus(other.player_index, unit.unit_type)
+            strength = defn["strength"]
+            move_range = defn["moves"]
             for (q, r) in game.tiles:
                 if hex_distance(unit.q, unit.r, q, r) <= move_range:
                     danger[(q, r)] = danger.get((q, r), 0) + strength
@@ -94,7 +90,7 @@ def _select_attack_target(game, civ):
     flavors = LEADER_FLAVORS[civ.player_index]
 
     my_strength = sum(
-        get_effective_base_strength(civ.player_index, u.unit_type)
+        UNIT_DEFS[u.unit_type]["strength"]
         for u in civ.units if not u.is_civilian
     )
 
@@ -106,7 +102,7 @@ def _select_attack_target(game, civ):
             continue
 
         enemy_strength = sum(
-            get_effective_base_strength(other.player_index, u.unit_type)
+            UNIT_DEFS[u.unit_type]["strength"]
             for u in other.units if not u.is_civilian
         )
 
@@ -222,8 +218,9 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
                 score += 25
         elif target_unit and target_unit.owner != civ.player_index:
             # No city — attack the unit directly
-            t_str = get_effective_base_strength(target_unit.owner, target_unit.unit_type)
-            my_str = get_effective_base_strength(civ.player_index, unit.unit_type)
+            t_defn = UNIT_DEFS[target_unit.unit_type]
+            t_str = t_defn["strength"]
+            my_str = defn["strength"]
             hp_ratio = unit.hp / defn["hp_max"]
 
             score += (my_str - t_str) * 4
@@ -264,8 +261,7 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
             score = (current_dist - new_dist) * 12
 
             tile_danger = danger.get((tq, tr), 0)
-            my_base = get_effective_base_strength(civ.player_index, unit.unit_type)
-            if tile_danger > my_base * 1.5:
+            if tile_danger > defn["strength"] * 1.5:
                 score -= 40
 
         else:  # PATROL
@@ -279,8 +275,7 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
             score = max(0, 10 - nearest_enemy_dist)
 
             tile_danger = danger.get((tq, tr), 0)
-            my_base = get_effective_base_strength(civ.player_index, unit.unit_type)
-            if tile_danger > my_base:
+            if tile_danger > defn["strength"]:
                 score -= 25
 
         if score > best_score:
@@ -502,15 +497,9 @@ def _act_city(game, civ, city, attack_target=None):
             ):
                 continue
             effective_str = defn.get("ranged_strength") or defn["strength"]
-            # Apply civ bonuses to strength evaluation
-            traits = CIV_TRAITS.get(civ.player_index, {})
-            su = traits.get("special_units", {}).get(key, {})
-            str_mult = (1 + su.get("strength_bonus", 0.0)) * (1 + traits.get("all_units_strength_bonus", 0.0))
-            effective_str *= str_mult
             base = 30 + effective_str * 1.5
             siege_urgency = 2.0 if attack_target else 0.5
-            city_bonus = defn.get("bonus_vs_city", 0) + su.get("bonus_vs_city_add", 0.0)
-            base += city_bonus * 5 * siege_urgency
+            base += defn.get("bonus_vs_city", 0) * 5 * siege_urgency
             score = (base + military_need * 8) * flavors["military"]
 
             unit_is_ranged = bool(defn.get("ranged_strength"))
@@ -541,11 +530,6 @@ def _act_city(game, civ, city, attack_target=None):
         score += effects.get("gold_per_turn",    0) * 6  * flavors["buildings"]
         score += effects.get("science_per_turn", 0) * 9  * flavors["science"]
         score += effects.get("culture_per_turn", 0) * 4  * flavors["buildings"]
-
-        # Special building bonus (e.g. Babylon library +6 science)
-        traits = CIV_TRAITS.get(civ.player_index, {})
-        sb = traits.get("special_buildings", {}).get(key, {})
-        score += sb.get("science_per_turn_add", 0) * 9 * flavors["science"]
 
         if "prod_bonus_hills" in effects:
             score += 20 * flavors["buildings"]
@@ -587,8 +571,6 @@ def _pick_research(game, civ):
         for unit_key in defn.get("unlocks_units", []):
             udef = UNIT_DEFS.get(unit_key, {})
             score += udef.get("strength", 5) * 2 * flavors["military"]
-            if is_special_unit(civ.player_index, unit_key):
-                score += 15
 
         for bld_key in defn.get("unlocks_buildings", []):
             bdef = BUILDING_DEFS.get(bld_key, {})
@@ -597,10 +579,6 @@ def _pick_research(game, civ):
             score += effects.get("gold_per_turn",    0) * 5 * flavors["buildings"]
             score += effects.get("prod_per_turn",    0) * 4 * flavors["buildings"]
             score += effects.get("food_per_turn",    0) * 4 * flavors["buildings"]
-            if is_special_building(civ.player_index, bld_key):
-                traits = CIV_TRAITS.get(civ.player_index, {})
-                sb = traits.get("special_buildings", {}).get(bld_key, {})
-                score += sb.get("science_per_turn_add", 0) * 8 * flavors["science"]
 
         for _ in defn.get("unlocks_improvements", []):
             score += 15 * flavors["buildings"]
@@ -664,9 +642,8 @@ def _act_gold(game, civ):
         if req_tech and req_tech not in civ.techs_researched:
             continue
         gold_cost = get_item_cost(key) * 2
-        eff_str = get_effective_base_strength(civ.player_index, key)
-        if civ.gold >= gold_cost and eff_str > best_str:
-            best_str = eff_str
+        if civ.gold >= gold_cost and defn["strength"] > best_str:
+            best_str = defn["strength"]
             best_key = key
 
     if best_key:

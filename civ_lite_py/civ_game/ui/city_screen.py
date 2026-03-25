@@ -1,7 +1,6 @@
 import pygame
 from civ_game.data.units import UNIT_DEFS
 from civ_game.data.buildings import BUILDING_DEFS
-from civ_game.data.civs import is_special_unit, is_special_building
 from civ_game.systems.yields import compute_city_yields
 
 SCREEN_W = 1850
@@ -103,10 +102,8 @@ def render_city_screen(screen, city, civ, ui_state):
     pygame.draw.line(screen, COLOR_BORDER, (mx + 8, y), (mx + MODAL_W - 8, y), 1); y += 8
 
     # Buildings list
-    bld_names = ", ".join(
-        BUILDING_DEFS[b]["name"] + (" \u2605" if is_special_building(civ.player_index, b) else "")
-        for b in city.buildings if b in BUILDING_DEFS
-    ) or "None"
+    bld_names = ", ".join(BUILDING_DEFS[b]["name"] for b in city.buildings
+                          if b in BUILDING_DEFS) or "None"
     screen.blit(_font(21).render(f"Buildings: {bld_names}", True, COLOR_DIM), (lx, y))
     y += line_h + 4
 
@@ -128,8 +125,7 @@ def render_city_screen(screen, city, civ, ui_state):
             continue
         cost = defn["prod_cost"]
         turns = max(1, (cost + prod_pt - 1) // prod_pt)
-        star = " \u2605" if is_special_building(civ.player_index, key) else ""
-        all_items.append((key, f"[{defn['name']}{star}  —  {cost} prod  ({turns} turns)]"))
+        all_items.append((key, f"[{defn['name']}  —  {cost} prod  ({turns} turns)]"))
 
     for key, defn in UNIT_DEFS.items():
         if defn["type"] == "civilian" and key not in ("settler", "worker"):
@@ -147,8 +143,7 @@ def render_city_screen(screen, city, civ, ui_state):
                 continue
         cost = defn["prod_cost"]
         turns = max(1, (cost + prod_pt - 1) // prod_pt)
-        star = " \u2605" if is_special_unit(civ.player_index, key) else ""
-        all_items.append((key, f"[{defn['name']}{star}  —  {cost} prod  ({turns} turns)]"))
+        all_items.append((key, f"[{defn['name']}  —  {cost} prod  ({turns} turns)]"))
 
     # --- Scrollable list area ---
     list_top = y

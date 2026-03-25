@@ -138,30 +138,22 @@ def render_hud(screen, game, ui_state):
 def _draw_unit_info(screen, unit, game, lx, base_y, lh):
     from civ_game.data.units import UNIT_DEFS
     from civ_game.entities.improvement import IMPROVEMENT_DEFS
-    from civ_game.data.civs import is_special_unit, CIV_TRAITS, get_unit_move_bonus
     defn = UNIT_DEFS[unit.unit_type]
     civ_color = PLAYER_COLORS[unit.owner]
 
-    special_mark = " \u2605" if is_special_unit(unit.owner, unit.unit_type) else ""
     status = "  [FORTIFIED]" if unit.fortified else ("  [HEALING]" if unit.healing else "")
-    screen.blit(_font(23).render(f"{defn['name']}{special_mark}  HP {unit.hp}/{defn['hp_max']}{status}",
+    screen.blit(_font(23).render(f"{defn['name']}  HP {unit.hp}/{defn['hp_max']}{status}",
                                  True, civ_color), (lx, base_y))
 
-    # Compute display strength with civ bonuses
-    traits = CIV_TRAITS.get(unit.owner, {})
-    su = traits.get("special_units", {}).get(unit.unit_type, {})
-    str_mult = (1 + su.get("strength_bonus", 0.0)) * (1 + traits.get("all_units_strength_bonus", 0.0))
-    str_val = round(defn['strength'] * str_mult, 1)
+    str_val = defn['strength']
     rstr = defn.get('ranged_strength')
     rng  = defn.get('range')
     if rstr:
-        rstr_display = round(rstr * str_mult, 1)
-        str_info = f"Str: {str_val}  Ranged: {rstr_display}  Range: {rng}"
+        str_info = f"Str: {str_val}  Ranged: {rstr}  Range: {rng}"
     else:
         str_info = f"Str: {str_val}"
-    base_moves = defn['moves'] + get_unit_move_bonus(unit.owner, unit.unit_type)
     screen.blit(_font(20).render(
-        f"Moves: {unit.moves_left}/{base_moves}   {str_info}",
+        f"Moves: {unit.moves_left}/{defn['moves']}   {str_info}",
         True, COLOR_TEXT), (lx, base_y + lh))
 
     if unit.building_improvement:

@@ -1,6 +1,5 @@
 from civ_game.data.units import UNIT_DEFS
 from civ_game.data.buildings import BUILDING_DEFS
-from civ_game.data.civs import get_unit_move_bonus
 
 
 def get_item_cost(item_key):
@@ -53,7 +52,7 @@ def _complete_item(city, civ, game, item_key):
             owner=civ.player_index,
             q=city.q, r=city.r,
             hp=defn["hp_max"],
-            moves_left=defn["moves"] + get_unit_move_bonus(civ.player_index, item_key),
+            moves_left=defn["moves"],
         )
         unit_name = defn["name"]
         # Place on city tile (or nearest free tile)

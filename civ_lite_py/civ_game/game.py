@@ -707,8 +707,7 @@ class Game:
                 tile = self.tiles.get((unit.q, unit.r))
                 in_own_territory = tile and tile.owner == civ.player_index
                 unit.hp = min(hp_max, unit.hp + (20 if in_own_territory else 10))
-            from civ_game.data.civs import get_unit_move_bonus
-            unit.moves_left = UNIT_DEFS[unit.unit_type]["moves"] + get_unit_move_bonus(civ.player_index, unit.unit_type)
+            unit.moves_left = UNIT_DEFS[unit.unit_type]["moves"]
             if unit.fortified:
                 unit.fortify_bonus = min(0.5, unit.fortify_bonus + 0.25)
 
