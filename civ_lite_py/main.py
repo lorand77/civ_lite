@@ -76,7 +76,8 @@ def _promote_queued_message(ui_state):
 def _run_cpu_turns(game, ui_state):
     """Run all consecutive CPU turns, panning the camera to each civ after its move."""
     from civ_game.map.hex_grid import hex_to_pixel, HEX_SIZE
-    from civ_game.systems.ai import ai_take_turn
+    from civ_game.systems.ai_a import ai_take_turn as ai_a_take_turn  # AI A: players 2, 3
+    from civ_game.systems.ai_b import ai_take_turn as ai_b_take_turn  # AI B: players 0, 1
 
     while (game.winner is None
            and game.current_civ().is_cpu):
@@ -114,7 +115,7 @@ def _run_cpu_turns(game, ui_state):
             continue
 
         cpu_civ = game.current_civ()
-        ai_take_turn(game, cpu_civ)
+        (ai_a_take_turn if cpu_civ.player_index >= 2 else ai_b_take_turn)(game, cpu_civ)
 
         focus = cpu_civ.original_capital
         if not focus and cpu_civ.units:

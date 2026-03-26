@@ -1,6 +1,7 @@
 from collections import Counter
 from civ_game.game import Game, PLAYER_NAMES
-from civ_game.systems.ai import ai_take_turn
+from civ_game.systems.ai_a import ai_take_turn as ai_a_take_turn  # AI A: players 2, 3
+from civ_game.systems.ai_b import ai_take_turn as ai_b_take_turn  # AI B: players 0, 1
 
 NUM_GAMES   = 1000
 MAX_TURNS   = 2000  # safety cap — prevents infinite loops on rare stalemates
@@ -13,7 +14,8 @@ for i in range(NUM_GAMES):
                 cpu_flags=[True] * NUM_PLAYERS)
 
     while game.winner is None and game.turn < MAX_TURNS:
-        ai_take_turn(game, game.current_civ())
+        civ = game.current_civ()
+        (ai_a_take_turn if civ.player_index >= 2 else ai_b_take_turn)(game, civ)
         game.end_turn()
 
     results.append({"game": i + 1, "winner": game.winner, "turns": game.turn})

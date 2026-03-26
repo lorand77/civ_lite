@@ -24,7 +24,8 @@ import pygame
 from civ_game.game import Game, PLAYER_COLORS, PLAYER_NAMES
 from civ_game.map.hex_grid import hex_to_pixel, hex_corners
 from civ_game.data.units import UNIT_DEFS
-from civ_game.systems.ai import ai_take_turn
+from civ_game.systems.ai_a import ai_take_turn as ai_a_take_turn  # AI A: players 2, 3
+from civ_game.systems.ai_b import ai_take_turn as ai_b_take_turn  # AI B: players 0, 1
 from civ_game.systems.score import compute_score
 
 # ── constants ────────────────────────────────────────────────────────────────
@@ -316,7 +317,7 @@ def main():
         if not paused and not game_over:
             civ = game.civs[game.current_player]
             if not civ.is_eliminated:
-                ai_take_turn(game, civ)
+                (ai_a_take_turn if civ.player_index >= 2 else ai_b_take_turn)(game, civ)
             game.end_turn()
             if game.winner is not None:
                 game_over = True

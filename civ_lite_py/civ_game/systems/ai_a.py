@@ -1,6 +1,6 @@
 """
-CPU AI — Option C: Threat-Aware Scored AI
-Each CPU civ calls ai_take_turn(game, civ) once per turn.
+AI A — controls player 2 (Huns) and player 3 (Babylon).
+Threat-Aware Scored AI: each CPU civ calls ai_take_turn(game, civ) once per turn.
 All decisions are scored numerically; the AI picks the best score.
 """
 from civ_game.entities.unit import get_reachable_tiles, get_attackable_tiles
