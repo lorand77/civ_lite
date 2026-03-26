@@ -186,7 +186,7 @@ def _assign_roles(civ, danger, attack_target) -> tuple:
 # ---------------------------------------------------------------------------
 # Component 5 — Military Unit Action
 # ---------------------------------------------------------------------------
-def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger):
+def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger, assault_ready=True):
     if unit.moves_left == 0:
         return
 
@@ -211,7 +211,9 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
         score = 0
 
         if target_city and target_city.owner != civ.player_index:
-            # City is always the target (Option A)
+            # Hold the assault on the target city until enough strength is mustered
+            if role == "ATTACKER" and target_city == attack_target and not assault_ready:
+                continue
             score += 30
             score += (50 - target_city.hp) * 0.5
             if target_city == attack_target:
@@ -693,6 +695,26 @@ def ai_take_turn(game, civ):
     attack_target = _select_attack_target(game, civ)
     roles, defender_cities = _assign_roles(civ, danger, attack_target)
 
+    # Muster check: hold the assault until 60% of attacker strength is within
+    # 5 tiles of the target, or at least 15 strength is already at the front.
+    assault_ready = True
+    if attack_target:
+        MUSTER_RADIUS = 5
+        total_atk_str = 0
+        mustered_str  = 0
+        for u in civ.units:
+            if u.is_civilian or roles.get(id(u)) != "ATTACKER":
+                continue
+            s = UNIT_DEFS[u.unit_type]["strength"]
+            total_atk_str += s
+            if hex_distance(u.q, u.r, attack_target.q, attack_target.r) <= MUSTER_RADIUS:
+                mustered_str += s
+        if total_atk_str > 0:
+            assault_ready = (
+                mustered_str >= 15 or
+                mustered_str >= total_atk_str * 0.6
+            )
+
     # Research
     _pick_research(game, civ)
 
@@ -715,7 +737,7 @@ def ai_take_turn(game, civ):
     for unit in list(civ.units):
         if unit.is_civilian:
             continue
-        _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger)
+        _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger, assault_ready)
 
     # Gold / buy
     _act_gold(game, civ)
