@@ -500,7 +500,7 @@ def _act_city(game, civ, city, attack_target=None):
                 continue
             effective_str = defn.get("ranged_strength") or defn["strength"]
             base = 30 + effective_str * 1.5
-            siege_urgency = 2.0 if attack_target else 0.5
+            siege_urgency = 2.0 if attack_target else 1.0
             base += defn.get("bonus_vs_city", 0) * 5 * siege_urgency
             score = (base + military_need * 8) * flavors["military"]
 
