@@ -471,11 +471,22 @@ class Game:
         city.owner = new_owner_idx
         city.hp = 50  # reset HP on capture
 
-        # Transfer all territory tiles that belonged to this city
-        for hq, hr in hexes_in_range(city.q, city.r, 3):
-            t = self.tiles.get((hq, hr))
-            if t and t.owner == old_owner_idx:
-                t.owner = new_owner_idx
+        # Voronoi territory transfer: each old-owner tile goes to whichever city is closest.
+        # Tiles nearer to a surviving old-owner city stay; tiles nearer to the captured
+        # city (now new_owner's) transfer. Handles city-tile protection and orphaned
+        # culture tiles automatically.
+        surviving_old_cities = [(c.q, c.r) for c in old_civ.cities]
+        for (hq, hr), t in self.tiles.items():
+            if t.owner != old_owner_idx:
+                continue
+            if not surviving_old_cities:
+                t.owner = new_owner_idx  # old civ eliminated — transfer everything
+            else:
+                dist_to_captured = hex_distance(hq, hr, city.q, city.r)
+                min_dist_to_old  = min(hex_distance(hq, hr, cq, cr)
+                                       for cq, cr in surviving_old_cities)
+                if dist_to_captured < min_dist_to_old:
+                    t.owner = new_owner_idx
 
         # Eliminate old civ if no cities remain
         if not old_civ.cities:
