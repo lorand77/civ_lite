@@ -426,7 +426,10 @@ def _act_worker(game, civ, worker):
     best_gain = 0
 
     for key, defn in IMPROVEMENT_DEFS.items():
-        if tile.terrain not in defn.get("valid_terrain", []):
+        terrain_ok = tile.terrain in defn.get("valid_terrain", [])
+        gold_ok = (key == "mine" and getattr(tile, "resource", None) == "gold"
+                   and tile.terrain in ("grassland", "plains"))
+        if not terrain_ok and not gold_ok:
             continue
         if tile.improvement == key:
             continue

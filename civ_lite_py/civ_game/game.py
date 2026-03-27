@@ -398,7 +398,14 @@ class Game:
         from civ_game.entities.improvement import IMPROVEMENT_DEFS
         defn = IMPROVEMENT_DEFS[improvement_key]
         tile = self.tiles.get((unit.q, unit.r))
-        if not tile or tile.terrain not in defn["valid_terrain"]:
+        terrain_ok = tile.terrain in defn["valid_terrain"]
+        # Special case: mines are also allowed on gold resource tiles (grassland/plains)
+        gold_resource_ok = (
+            improvement_key == "mine"
+            and getattr(tile, "resource", None) == "gold"
+            and tile.terrain in ("grassland", "plains")
+        )
+        if not tile or (not terrain_ok and not gold_resource_ok):
             return False
         # Check tech requirement
         civ = self.civs[unit.owner]
