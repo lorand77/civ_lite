@@ -378,7 +378,7 @@ def _act_settler(game, civ, settler):
     ok, _ = game.can_found_city(settler)
     if ok:
         found_score = _score_settle_tile(settler.q, settler.r, game, civ)
-        if found_score > 30:
+        if found_score > 15:
             game.found_city(settler)
             return
 
@@ -395,9 +395,7 @@ def _act_settler(game, civ, settler):
         # Skip tiles that are in enemy territory or too close to existing cities
         if tile.owner is not None and tile.owner != civ.player_index:
             continue
-        if any(hex_distance(tq, tr, c.q, c.r) <= 2
-               for oc in game.civs for c in oc.cities):
-            continue
+
         s = _score_settle_tile(tq, tr, game, civ)
         s *= flavors["expansion"]
         if s > best_score:
@@ -483,6 +481,10 @@ def _act_city(game, civ, city, attack_target=None):
                 if city_count >= 4:
                     continue
                 if city.population < 2:
+                    continue
+                if any(u.unit_type == "settler" for u in civ.units):
+                    continue
+                if any("settler" in c.production_queue for c in civ.cities if c is not city):
                     continue
                 score = 55 * flavors["expansion"]
             elif key == "worker":
