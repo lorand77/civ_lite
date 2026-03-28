@@ -470,6 +470,8 @@ class Game:
 
         city.owner = new_owner_idx
         city.hp = 50  # reset HP on capture
+        city.production_queue.clear()
+        city.production_progress = 0
 
         # Voronoi territory transfer: each old-owner tile goes to whichever city is closest.
         # Tiles nearer to a surviving old-owner city stay; tiles nearer to the captured
