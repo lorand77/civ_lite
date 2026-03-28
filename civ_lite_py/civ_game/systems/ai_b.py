@@ -214,10 +214,14 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
             # Hold the assault on the target city until enough strength is mustered
             if role == "ATTACKER" and target_city == attack_target and not assault_ready:
                 continue
+            hp_ratio = unit.hp / defn["hp_max"]
+            if unit.hp < 30:
+                continue  # never attack a city at critical HP
             score += 30
             score += (50 - target_city.hp) * 0.5
             if target_city == attack_target:
                 score += 25
+            score -= (1.0 - hp_ratio) * 60
         elif target_unit and target_unit.owner != civ.player_index:
             # No city — attack the unit directly
             t_defn = UNIT_DEFS[target_unit.unit_type]
