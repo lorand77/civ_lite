@@ -3,7 +3,7 @@ from civ_game.game import Game, PLAYER_NAMES
 from civ_game.systems.ai_a import ai_take_turn as ai_a_take_turn  # AI A: players 2, 3
 from civ_game.systems.ai_b import ai_take_turn as ai_b_take_turn  # AI B: players 0, 1
 
-NUM_GAMES   = 100
+NUM_GAMES   = 1000
 MAX_TURNS   = 2000  # safety cap — prevents infinite loops on rare stalemates
 NUM_PLAYERS = 4
 

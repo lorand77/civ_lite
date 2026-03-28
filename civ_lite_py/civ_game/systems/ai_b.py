@@ -260,6 +260,11 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
         elif role == "ATTACKER" and attack_target:
             current_dist = hex_distance(unit.q, unit.r, attack_target.q, attack_target.r)
             new_dist = hex_distance(tq, tr, attack_target.q, attack_target.r)
+
+            if not assault_ready:
+                HOLD_DIST = 3
+                if new_dist < HOLD_DIST:
+                    continue  # don't advance inside the staging perimeter
             score = (current_dist - new_dist) * 12
 
             tile_danger = danger.get((tq, tr), 0)
@@ -700,25 +705,29 @@ def ai_take_turn(game, civ):
     attack_target = _select_attack_target(game, civ)
     roles, defender_cities = _assign_roles(civ, danger, attack_target)
 
-    # Muster check: hold the assault until 60% of attacker strength is within
-    # 5 tiles of the target, or at least 15 strength is already at the front.
+    # Muster check: effective attacker count vs city HP.
+    # Melee units contribute min(1.5, max(1.0, strength/10)).
+    # Ranged units contribute ranged_strength * city_bonus / 10 (unclamped).
+    # min_attackers = round(city_hp / (50/3) + 1) → 4 at full HP, 1 at low HP.
     assault_ready = True
     if attack_target:
         MUSTER_RADIUS = 5
-        total_atk_str = 0
-        mustered_str  = 0
+        REFERENCE_STRENGTH = 10
+        min_attackers = round(attack_target.hp / (50 / 3) + 1)
+        effective_count = 0.0
         for u in civ.units:
             if u.is_civilian or roles.get(id(u)) != "ATTACKER":
                 continue
-            s = UNIT_DEFS[u.unit_type]["strength"]
-            total_atk_str += s
-            if hex_distance(u.q, u.r, attack_target.q, attack_target.r) <= MUSTER_RADIUS:
-                mustered_str += s
-        if total_atk_str > 0:
-            assault_ready = (
-                mustered_str >= 15 or
-                mustered_str >= total_atk_str * 0.6
-            )
+            if hex_distance(u.q, u.r, attack_target.q, attack_target.r) > MUSTER_RADIUS:
+                continue
+            udef = UNIT_DEFS[u.unit_type]
+            city_mult = udef.get("bonus_vs_city", 1.0)
+            if udef.get("ranged_strength"):
+                contrib = udef["ranged_strength"] * city_mult / REFERENCE_STRENGTH
+            else:
+                contrib = min(1.5, max(1.0, udef["strength"] / REFERENCE_STRENGTH))
+            effective_count += contrib
+        assault_ready = effective_count >= min_attackers
 
     # Research
     _pick_research(game, civ)
