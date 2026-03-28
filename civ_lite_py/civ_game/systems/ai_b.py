@@ -715,6 +715,7 @@ def ai_take_turn(game, civ):
         REFERENCE_STRENGTH = 10
         min_attackers = round(attack_target.hp / (50 / 3) + 1)
         effective_count = 0.0
+        melee_present = False
         for u in civ.units:
             if u.is_civilian or roles.get(id(u)) != "ATTACKER":
                 continue
@@ -726,8 +727,9 @@ def ai_take_turn(game, civ):
                 contrib = udef["ranged_strength"] * city_mult / REFERENCE_STRENGTH
             else:
                 contrib = min(1.5, max(1.0, udef["strength"] / REFERENCE_STRENGTH))
+                melee_present = True
             effective_count += contrib
-        assault_ready = effective_count >= min_attackers
+        assault_ready = effective_count >= min_attackers and melee_present
 
     # Research
     _pick_research(game, civ)
