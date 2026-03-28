@@ -215,7 +215,7 @@ def draw_hud(surface, game, speed_idx, paused, font_sm, font_md):
             txt = font_sm.render(label, True, (120, 120, 120))
         else:
             score = compute_score(civ, game)
-            label = f"{PLAYER_NAMES[civ.player_index]}  C:{city_count}  U:{unit_count}  {score}pt"
+            label = f"{PLAYER_NAMES[civ.player_index]}  C:{city_count}  U:{unit_count}  G:{civ.gold}  {score}pt"
             txt = font_sm.render(label, True, col)
         surface.blit(txt, (x, (HUD_H - txt.get_height()) // 2))
 
