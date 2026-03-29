@@ -101,6 +101,6 @@ def _place_resources(tiles, terrain_grid, cols, rows, rng):
 
     place(hills_pos,    "iron",     8)
     place(plains_grass, "horses",   6)
-    place(plains_grass, "gold",     4)
-    place(hills_pos,    "silver",   5)
-    place(forest_hills, "diamonds", 3)
+    place(plains_grass, "gold",     7)
+    place(hills_pos,    "silver",   9)
+    place(forest_hills, "diamonds", 4)

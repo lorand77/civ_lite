@@ -60,19 +60,19 @@ RESOURCES = {
     "gold": {
         "type": "luxury",
         "valid_terrain": ["plains", "grassland"],
-        "yield_bonus": {"gold": 3},
+        "yield_bonus": {"gold": 4},
         "requires_tech": None,
     },
     "silver": {
         "type": "luxury",
         "valid_terrain": ["hills"],
-        "yield_bonus": {"gold": 2},
+        "yield_bonus": {"gold": 3},
         "requires_tech": None,
     },
     "diamonds": {
         "type": "luxury",
         "valid_terrain": ["forest", "hills"],
-        "yield_bonus": {"gold": 4},
+        "yield_bonus": {"gold": 5},
         "requires_tech": None,
     },
 }
