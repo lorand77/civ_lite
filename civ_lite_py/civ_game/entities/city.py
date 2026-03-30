@@ -2,7 +2,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from civ_game.map.hex_grid import hex_neighbors
-from civ_game.map.terrain import TERRAIN_YIELDS
+from civ_game.map.terrain import TERRAIN_YIELDS, RESOURCES
+from civ_game.entities.improvement import IMPROVEMENT_DEFS
 
 
 @dataclass
@@ -38,6 +39,15 @@ def auto_assign_worked_tiles(city: City, tiles: dict):
             continue
         y = TERRAIN_YIELDS[tile.terrain]
         score = y["food"] * 1.1 + y["prod"] + y["gold"]
+
+        if tile.resource and tile.resource in RESOURCES:
+            b = RESOURCES[tile.resource]["yield_bonus"]
+            score += b.get("food", 0) * 1.1 + b.get("prod", 0) + b.get("gold", 0)
+
+        if tile.improvement and tile.improvement in IMPROVEMENT_DEFS:
+            b = IMPROVEMENT_DEFS[tile.improvement]["yield_bonus"]
+            score += b.get("food", 0) * 1.1 + b.get("prod", 0) + b.get("gold", 0)
+
         candidates.append(((nq, nr), score))
 
     candidates.sort(key=lambda x: -x[1])
