@@ -480,6 +480,52 @@ def _act_city(game, civ, city, attack_target=None):
                        if not u.is_civilian and UNIT_DEFS[u.unit_type].get("ranged_strength"))
     ranged_ratio = ranged_count / military_count if military_count > 0 else 0.0
 
+    # --- Strategic priority overrides (short-circuit normal scoring) ---
+
+    # Priority 1: Enemy unit within 4 tiles → build the best available military unit now
+    under_attack = any(
+        hex_distance(u.q, u.r, city.q, city.r) <= 4
+        for other in game.civs
+        if other.player_index != civ.player_index and not other.is_eliminated
+        for u in other.units if not u.is_civilian
+    )
+    if under_attack:
+        best_mil_key, best_mil_str = None, -1
+        for key, defn in UNIT_DEFS.items():
+            if defn["type"] not in ("melee", "ranged"):
+                continue
+            req_tech = defn.get("requires_tech")
+            if req_tech and req_tech not in civ.techs_researched:
+                continue
+            req_res = defn.get("requires_resource")
+            if req_res and not any(
+                t.resource == req_res and t.owner == civ.player_index
+                for t in game.tiles.values()
+            ):
+                continue
+            s = defn.get("ranged_strength") or defn["strength"]
+            if s > best_mil_str:
+                best_mil_str, best_mil_key = s, key
+        if best_mil_key:
+            city.production_queue.append(best_mil_key)
+            return
+
+    # Priority 2: No worker anywhere in the civ → build one
+    has_worker = any(u.unit_type == "worker" for u in civ.units)
+    worker_queued = any("worker" in c.production_queue for c in civ.cities if c is not city)
+    if not has_worker and not worker_queued:
+        city.production_queue.append("worker")
+        return
+
+    # Priority 3: Fewer than 3 cities and able to expand → settler
+    if (city_count < 3
+            and city.population >= 2
+            and not any(u.unit_type == "settler" for u in civ.units)
+            and not any("settler" in c.production_queue for c in civ.cities if c is not city)):
+        city.production_queue.append("settler")
+        return
+
+    # --- Normal scoring below ---
     best_score = -9999
     best_key = None
 
