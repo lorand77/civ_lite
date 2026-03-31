@@ -18,6 +18,7 @@ class Unit:
     fortified: bool = False
     fortify_bonus: float = 0.0
     healing: bool = False
+    xp: int = 0
     building_improvement: str | None = None  # worker: improvement being built
     build_turns_left: int = 0
 

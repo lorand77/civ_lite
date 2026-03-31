@@ -533,11 +533,14 @@ class Game:
             # ---- Attack city (always, regardless of garrison) ----
             if unit_type == "ranged":
                 city_dmg, _ = bombard_city(attacker, target_city)
+                attacker.xp += 2
                 msg = (f"Bombarded {target_city.name}: -{city_dmg} HP "
                        f"(HP: {target_city.hp}/50)")
             elif unit_type == "melee":
                 old_owner_idx = target_city.owner
                 city_dmg, a_dmg = bombard_city(attacker, target_city)
+                if attacker.hp > 0:
+                    attacker.xp += 2
                 msg = (f"Attacked {target_city.name}: -{city_dmg} HP "
                        f"(HP: {target_city.hp}/50), attacker -{a_dmg} HP")
                 if attacker.hp <= 0:
@@ -567,10 +570,14 @@ class Game:
                 self.remove_unit(target_unit)
                 if unit_type == "melee" and attacker.hp > 0:
                     self._advance_unit(attacker, target_q, target_r)
+            else:
+                target_unit.xp += 2  # defender survives — gains XP from being attacked
 
             if attacker.hp <= 0:
                 self.remove_unit(attacker)
                 msg += " (attacker died)"
+            else:
+                attacker.xp += 2
 
         self.check_victory()
         return msg

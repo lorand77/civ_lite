@@ -193,6 +193,9 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
     role = roles.get(id(unit), "PATROL")
     defn = UNIT_DEFS[unit.unit_type]
 
+    xp_factor = 1.0 + unit.xp * 0.01          # mirrors combat.py xp_bonus
+    my_eff_str = defn["strength"] * xp_factor  # effective strength incl. XP
+
     best_score = -9999
     best_action = None  # ("attack", q, r) | ("move", q, r, cost) | ("fortify",)
 
@@ -226,10 +229,9 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
             # No city — attack the unit directly
             t_defn = UNIT_DEFS[target_unit.unit_type]
             t_str = t_defn["strength"]
-            my_str = defn["strength"]
             hp_ratio = unit.hp / defn["hp_max"]
 
-            score += (my_str - t_str) * 4
+            score += (my_eff_str - t_str) * 4
             score += (100 - target_unit.hp) * 0.3
             score -= (1.0 - hp_ratio) * 30
         else:
@@ -272,7 +274,7 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
             score = (current_dist - new_dist) * 12
 
             tile_danger = danger.get((tq, tr), 0)
-            if tile_danger > defn["strength"] * 1.5:
+            if tile_danger > my_eff_str * 1.5:
                 score -= 40
 
         else:  # PATROL
@@ -286,7 +288,7 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
             score = max(0, 10 - nearest_enemy_dist)
 
             tile_danger = danger.get((tq, tr), 0)
-            if tile_danger > defn["strength"]:
+            if tile_danger > my_eff_str:
                 score -= 25
 
         if score > best_score:
@@ -310,7 +312,8 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
     hp_max = defn["hp_max"]
     if unit.hp < hp_max:
         missing = hp_max - unit.hp
-        heal_score = missing * 0.5  # up to +50 at 0 HP
+        heal_xp_discount = min(0.3, unit.xp * 0.003)  # up to -30% at 100 XP
+        heal_score = missing * (0.5 - heal_xp_discount)  # veterans fight hurt
         if in_city:
             heal_score += 5
         if heal_score > best_score:
@@ -773,10 +776,11 @@ def ai_take_turn(game, civ):
                 continue
             udef = UNIT_DEFS[u.unit_type]
             city_mult = udef.get("bonus_vs_city", 1.0)
+            u_xp_factor = 1.0 + u.xp * 0.01
             if udef.get("ranged_strength"):
-                contrib = udef["ranged_strength"] * city_mult / REFERENCE_STRENGTH
+                contrib = udef["ranged_strength"] * u_xp_factor * city_mult / REFERENCE_STRENGTH
             else:
-                contrib = min(1.5, max(1.0, udef["strength"] / REFERENCE_STRENGTH))
+                contrib = min(1.5, max(1.0, udef["strength"] * u_xp_factor / REFERENCE_STRENGTH))
                 melee_present = True
             effective_count += contrib
         assault_ready = effective_count >= min_attackers and melee_present

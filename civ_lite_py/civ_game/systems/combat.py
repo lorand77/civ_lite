@@ -19,7 +19,8 @@ def effective_strength(unit, tile, vs_unit_type=None):
     hp_max = UNIT_DEFS[unit.unit_type]["hp_max"]
     hp_modifier = 0.5 + 0.5 * (unit.hp / hp_max)   # 1.0 at full HP, 0.5 at 0 HP
     unit_bonus = UNIT_DEFS[unit.unit_type].get("bonus_vs", {}).get(vs_unit_type, 0.0)
-    return base * (1 + terrain_bonus + fortify_bonus + unit_bonus) * hp_modifier
+    xp_bonus = getattr(unit, "xp", 0) / 100         # +1% strength per XP point
+    return base * (1 + terrain_bonus + fortify_bonus + unit_bonus + xp_bonus) * hp_modifier
 
 
 def city_combat_strength(city) -> float:

@@ -153,8 +153,9 @@ def _draw_unit_info(screen, unit, game, lx, base_y, lh):
         str_info = f"Str: {str_val}  Ranged: {rstr}  Range: {rng}"
     else:
         str_info = f"Str: {str_val}"
+    xp_info = f"   XP: {unit.xp}" if not unit.is_civilian else ""
     screen.blit(_font(20).render(
-        f"Moves: {unit.moves_left}/{defn['moves']}   {str_info}",
+        f"Moves: {unit.moves_left}/{defn['moves']}   {str_info}{xp_info}",
         True, COLOR_TEXT), (lx, base_y + lh))
 
     if unit.building_improvement:
