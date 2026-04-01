@@ -1,5 +1,5 @@
 """
-AI A — controls player 2 (Huns) and player 3 (Babylon).
+AI D — controls player 0 (Rome) and player 1 (Greece).
 Threat-Aware Scored AI: each CPU civ calls ai_take_turn(game, civ) once per turn.
 All decisions are scored numerically; the AI picks the best score.
 """
@@ -17,7 +17,7 @@ from civ_game.data.techs import TECH_DEFS
 LEADER_FLAVORS = {
     0: {  # Rome — balanced expansionist
         "military":   1.1,
-        "expansion":  1.3,
+        "expansion":  0.8,
         "science":    0.9,
         "buildings":  1.0,
         "aggression": 1.0,
@@ -186,12 +186,15 @@ def _assign_roles(civ, danger, attack_target) -> tuple:
 # ---------------------------------------------------------------------------
 # Component 5 — Military Unit Action
 # ---------------------------------------------------------------------------
-def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger):
+def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger, assault_ready=True):
     if unit.moves_left == 0:
         return
 
     role = roles.get(id(unit), "PATROL")
     defn = UNIT_DEFS[unit.unit_type]
+
+    xp_factor = 1.0 + unit.xp * 0.01          # mirrors combat.py xp_bonus
+    my_eff_str = defn["strength"] * xp_factor  # effective strength incl. XP
 
     best_score = -9999
     best_action = None  # ("attack", q, r) | ("move", q, r, cost) | ("fortify",)
@@ -211,19 +214,24 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
         score = 0
 
         if target_city and target_city.owner != civ.player_index:
-            # City is always the target (Option A)
+            # Hold the assault on the target city until enough strength is mustered
+            if role == "ATTACKER" and target_city == attack_target and not assault_ready:
+                continue
+            hp_ratio = unit.hp / defn["hp_max"]
+            if unit.hp < 30:
+                continue  # never attack a city at critical HP
             score += 30
             score += (50 - target_city.hp) * 0.5
             if target_city == attack_target:
                 score += 25
+            score -= (1.0 - hp_ratio) * 60
         elif target_unit and target_unit.owner != civ.player_index:
             # No city — attack the unit directly
             t_defn = UNIT_DEFS[target_unit.unit_type]
             t_str = t_defn["strength"]
-            my_str = defn["strength"]
             hp_ratio = unit.hp / defn["hp_max"]
 
-            score += (my_str - t_str) * 4
+            score += (my_eff_str - t_str) * 4
             score += (100 - target_unit.hp) * 0.3
             score -= (1.0 - hp_ratio) * 30
         else:
@@ -258,10 +266,15 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
         elif role == "ATTACKER" and attack_target:
             current_dist = hex_distance(unit.q, unit.r, attack_target.q, attack_target.r)
             new_dist = hex_distance(tq, tr, attack_target.q, attack_target.r)
+
+            if not assault_ready:
+                HOLD_DIST = 3
+                if new_dist < HOLD_DIST:
+                    continue  # don't advance inside the staging perimeter
             score = (current_dist - new_dist) * 12
 
             tile_danger = danger.get((tq, tr), 0)
-            if tile_danger > defn["strength"] * 1.5:
+            if tile_danger > my_eff_str * 1.5:
                 score -= 40
 
         else:  # PATROL
@@ -275,7 +288,7 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
             score = max(0, 10 - nearest_enemy_dist)
 
             tile_danger = danger.get((tq, tr), 0)
-            if tile_danger > defn["strength"]:
+            if tile_danger > my_eff_str:
                 score -= 25
 
         if score > best_score:
@@ -299,7 +312,8 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
     hp_max = defn["hp_max"]
     if unit.hp < hp_max:
         missing = hp_max - unit.hp
-        heal_score = missing * 0.5  # up to +50 at 0 HP
+        heal_xp_discount = min(0.3, unit.xp * 0.003)  # up to -30% at 100 XP
+        heal_score = missing * (0.5 - heal_xp_discount)  # veterans fight hurt
         if in_city:
             heal_score += 5
         if heal_score > best_score:
@@ -469,6 +483,52 @@ def _act_city(game, civ, city, attack_target=None):
                        if not u.is_civilian and UNIT_DEFS[u.unit_type].get("ranged_strength"))
     ranged_ratio = ranged_count / military_count if military_count > 0 else 0.0
 
+    # --- Strategic priority overrides (short-circuit normal scoring) ---
+
+    # Priority 1: Enemy unit within 4 tiles → build the best available military unit now
+    under_attack = any(
+        hex_distance(u.q, u.r, city.q, city.r) <= 4
+        for other in game.civs
+        if other.player_index != civ.player_index and not other.is_eliminated
+        for u in other.units if not u.is_civilian
+    )
+    if under_attack:
+        best_mil_key, best_mil_str = None, -1
+        for key, defn in UNIT_DEFS.items():
+            if defn["type"] not in ("melee", "ranged"):
+                continue
+            req_tech = defn.get("requires_tech")
+            if req_tech and req_tech not in civ.techs_researched:
+                continue
+            req_res = defn.get("requires_resource")
+            if req_res and not any(
+                t.resource == req_res and t.owner == civ.player_index
+                for t in game.tiles.values()
+            ):
+                continue
+            s = defn.get("ranged_strength") or defn["strength"]
+            if s > best_mil_str:
+                best_mil_str, best_mil_key = s, key
+        if best_mil_key:
+            city.production_queue.append(best_mil_key)
+            return
+
+    # Priority 2: No worker anywhere in the civ → build one
+    has_worker = any(u.unit_type == "worker" for u in civ.units)
+    worker_queued = any("worker" in c.production_queue for c in civ.cities if c is not city)
+    if not has_worker and not worker_queued:
+        city.production_queue.append("worker")
+        return
+
+    # Priority 3: Fewer than 3 cities and able to expand → settler
+    if (city_count < 3
+            and city.population >= 2
+            and not any(u.unit_type == "settler" for u in civ.units)
+            and not any("settler" in c.production_queue for c in civ.cities if c is not city)):
+        city.production_queue.append("settler")
+        return
+
+    # --- Normal scoring below ---
     best_score = -9999
     best_key = None
 
@@ -503,7 +563,7 @@ def _act_city(game, civ, city, attack_target=None):
                 continue
             effective_str = defn.get("ranged_strength") or defn["strength"]
             base = 30 + effective_str * 1.5
-            siege_urgency = 2.0 if attack_target else 0.5
+            siege_urgency = 2.0 if attack_target else 1.0
             base += defn.get("bonus_vs_city", 0) * 5 * siege_urgency
             score = (base + military_need * 8) * flavors["military"]
 
@@ -698,6 +758,33 @@ def ai_take_turn(game, civ):
     attack_target = _select_attack_target(game, civ)
     roles, defender_cities = _assign_roles(civ, danger, attack_target)
 
+    # Muster check: effective attacker count vs city HP.
+    # Melee units contribute min(1.5, max(1.0, strength/10)).
+    # Ranged units contribute ranged_strength * city_bonus / 10 (unclamped).
+    # min_attackers = round(city_hp / (50/3) + 1) → 4 at full HP, 1 at low HP.
+    assault_ready = True
+    if attack_target:
+        MUSTER_RADIUS = 5
+        REFERENCE_STRENGTH = 10
+        min_attackers = round(attack_target.hp / (50 / 3) + 1)
+        effective_count = 0.0
+        melee_present = False
+        for u in civ.units:
+            if u.is_civilian or roles.get(id(u)) != "ATTACKER":
+                continue
+            if hex_distance(u.q, u.r, attack_target.q, attack_target.r) > MUSTER_RADIUS:
+                continue
+            udef = UNIT_DEFS[u.unit_type]
+            city_mult = udef.get("bonus_vs_city", 1.0)
+            u_xp_factor = 1.0 + u.xp * 0.01
+            if udef.get("ranged_strength"):
+                contrib = udef["ranged_strength"] * u_xp_factor * city_mult / REFERENCE_STRENGTH
+            else:
+                contrib = min(1.5, max(1.0, udef["strength"] * u_xp_factor / REFERENCE_STRENGTH))
+                melee_present = True
+            effective_count += contrib
+        assault_ready = effective_count >= min_attackers and melee_present
+
     # Research
     _pick_research(game, civ)
 
@@ -720,7 +807,7 @@ def ai_take_turn(game, civ):
     for unit in list(civ.units):
         if unit.is_civilian:
             continue
-        _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger)
+        _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger, assault_ready)
 
     # Gold / buy
     _act_gold(game, civ)
