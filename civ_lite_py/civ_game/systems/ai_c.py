@@ -17,7 +17,7 @@ from civ_game.data.techs import TECH_DEFS
 LEADER_FLAVORS = {
     0: {  # Rome — balanced expansionist
         "military":   1.1,
-        "expansion":  1.3,
+        "expansion":  0.8,
         "science":    0.9,
         "buildings":  1.0,
         "aggression": 1.0,
