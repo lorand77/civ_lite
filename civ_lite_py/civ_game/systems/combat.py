@@ -42,23 +42,33 @@ def melee_attack(attacker, defender, attacker_tile, defender_tile):
     return attacker_dmg, defender_dmg
 
 
-def ranged_attack(attacker, defender, defender_tile):
+def ranged_attack(attacker, defender, defender_tile, attacker_tile=None):
     """Only defender takes damage (no retaliation)."""
-    a_str = UNIT_DEFS[attacker.unit_type].get(
-        "ranged_strength", UNIT_DEFS[attacker.unit_type]["strength"]
-    )
+    defn = UNIT_DEFS[attacker.unit_type]
+    if attacker_tile is not None:
+        # Use effective_strength for the base bonuses, then swap in ranged_strength
+        base_multiplier = effective_strength(attacker, attacker_tile) / defn["strength"]
+        a_str = defn.get("ranged_strength", defn["strength"]) * base_multiplier
+    else:
+        a_str = defn.get("ranged_strength", defn["strength"])
     d_str = effective_strength(defender, defender_tile)
     defender_dmg = calc_damage(a_str, d_str)
     defender.hp = max(0, defender.hp - defender_dmg)
     return defender_dmg
 
 
-def bombard_city(attacker, city):
+def bombard_city(attacker, city, attacker_tile=None):
     """Attack city HP directly. Returns (city_dmg, attacker_dmg).
     Melee attackers take retaliation damage from the city; ranged do not."""
     defn = UNIT_DEFS[attacker.unit_type]
-    a_str = defn.get("ranged_strength", defn["strength"])
     city_bonus = defn.get("bonus_vs_city", 0.0)
+
+    if attacker_tile is not None:
+        base_multiplier = effective_strength(attacker, attacker_tile) / defn["strength"]
+        a_str = defn.get("ranged_strength", defn["strength"]) * base_multiplier
+    else:
+        a_str = defn.get("ranged_strength", defn["strength"])
+
     a_str = a_str * (1 + city_bonus)
     city_dmg = max(1, min(20, int(a_str * 0.4)))
     city.hp = max(0, city.hp - city_dmg)
@@ -66,9 +76,8 @@ def bombard_city(attacker, city):
     attacker_dmg = 0
     if defn["type"] == "melee":
         c_str = city_combat_strength(city)
-        hp_max = defn["hp_max"]
-        hp_modifier = 0.5 + 0.5 * (attacker.hp / hp_max)
-        a_eff_str = defn["strength"] * hp_modifier
+        a_eff_str = effective_strength(attacker, attacker_tile) if attacker_tile is not None \
+                    else defn["strength"] * (0.5 + 0.5 * (attacker.hp / defn["hp_max"]))
         attacker_dmg = calc_damage(c_str, a_eff_str)
         attacker.hp = max(0, attacker.hp - attacker_dmg)
 

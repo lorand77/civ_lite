@@ -532,13 +532,13 @@ class Game:
         if target_city and target_city.owner != attacker.owner:
             # ---- Attack city (always, regardless of garrison) ----
             if unit_type == "ranged":
-                city_dmg, _ = bombard_city(attacker, target_city)
+                city_dmg, _ = bombard_city(attacker, target_city, attacker_tile)
                 attacker.xp += 2
                 msg = (f"Bombarded {target_city.name}: -{city_dmg} HP "
                        f"(HP: {target_city.hp}/50)")
             elif unit_type == "melee":
                 old_owner_idx = target_city.owner
-                city_dmg, a_dmg = bombard_city(attacker, target_city)
+                city_dmg, a_dmg = bombard_city(attacker, target_city, attacker_tile)
                 if attacker.hp > 0:
                     attacker.xp += 2
                 msg = (f"Attacked {target_city.name}: -{city_dmg} HP "
@@ -563,7 +563,7 @@ class Game:
                 msg = (f"{defn['name']} vs {_DEFS[target_unit.unit_type]['name']}: "
                        f"-{a_dmg} / -{d_dmg} HP")
             else:
-                d_dmg = ranged_attack(attacker, target_unit, target_tile)
+                d_dmg = ranged_attack(attacker, target_unit, target_tile, attacker_tile)
                 msg = f"Ranged hit: {_DEFS[target_unit.unit_type]['name']} -{d_dmg} HP"
 
             if target_unit.hp <= 0:
