@@ -363,7 +363,7 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
             new_dist = hex_distance(tq, tr, attack_target.q, attack_target.r)
 
             if not assault_ready:
-                HOLD_DIST = 3
+                HOLD_DIST = 5
                 if new_dist < HOLD_DIST:
                     continue  # don't advance inside the staging perimeter
             score = (current_dist - new_dist) * 12
