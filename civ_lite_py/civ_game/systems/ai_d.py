@@ -47,6 +47,102 @@ LEADER_FLAVORS = {
 
 
 # ---------------------------------------------------------------------------
+# Grand Strategy Layer
+# ---------------------------------------------------------------------------
+_civ_strategies: dict = {}   # {player_index: {"strategy": str, "turn": int}}
+STRATEGY_REEVAL_INTERVAL = 25
+
+STRATEGY_BOOSTS = {
+    "DOMINATION": {
+        "military":   1.4,
+        "aggression": 1.3,
+        "expansion":  0.8,
+        "science":    0.7,
+        "buildings":  0.7,
+    },
+    "SCIENCE": {
+        "military":   0.8,
+        "aggression": 0.7,
+        "expansion":  0.9,
+        "science":    1.5,
+        "buildings":  1.3,
+    },
+    "EXPANSION": {
+        "military":   0.9,
+        "aggression": 0.8,
+        "expansion":  1.6,
+        "science":    0.9,
+        "buildings":  1.0,
+    },
+}
+
+
+def _pick_strategy(game, civ, base_flavors) -> str:
+    my_units = [u for u in civ.units if not u.is_civilian]
+    my_strength = sum(UNIT_DEFS[u.unit_type]["strength"] for u in my_units)
+
+    # DOMINATION score
+    dom = base_flavors["military"] * 12 + base_flavors["aggression"] * 10
+    dom += my_strength * 0.4
+    dom -= len(civ.techs_researched) * 1
+    for other in game.civs:
+        if other.player_index == civ.player_index or other.is_eliminated:
+            continue
+        for city in other.cities:
+            if my_units:
+                dist = min(hex_distance(u.q, u.r, city.q, city.r) for u in my_units)
+                if dist < 8:
+                    dom += 15
+                    break
+
+    # SCIENCE score
+    sci = base_flavors["science"] * 12 + base_flavors["buildings"] * 6
+    sci += len(civ.techs_researched) * 2
+    sci += len(civ.cities) * 3
+    sci -= my_strength * 0.2
+
+    # EXPANSION score
+    exp = base_flavors["expansion"] * 12
+    total_land = sum(1 for t in game.tiles.values() if t.terrain != "ocean")
+    owned = sum(1 for t in game.tiles.values() if t.owner == civ.player_index)
+    exp += (1.0 - owned / max(1, total_land)) * 20
+    exp -= len(civ.cities) * 4
+    if game.turn > 120:
+        exp -= 20
+
+    return max(
+        [("DOMINATION", dom), ("SCIENCE", sci), ("EXPANSION", exp)],
+        key=lambda x: x[1],
+    )[0]
+
+
+def _get_effective_flavors(game, civ) -> dict:
+    """Return flavor weights boosted by the civ's current grand strategy."""
+    base = LEADER_FLAVORS[civ.player_index]
+    state = _civ_strategies.get(civ.player_index)
+
+    if state is None or game.turn - state["turn"] >= STRATEGY_REEVAL_INTERVAL:
+        strategy = _pick_strategy(game, civ, base)
+        _civ_strategies[civ.player_index] = {"strategy": strategy, "turn": game.turn}
+    else:
+        strategy = state["strategy"]
+
+    # Emergency override: city under direct threat → always DOMINATION
+    under_attack = any(
+        hex_distance(u.q, u.r, city.q, city.r) <= 4
+        for other in game.civs
+        if other.player_index != civ.player_index and not other.is_eliminated
+        for u in other.units if not u.is_civilian
+        for city in civ.cities
+    )
+    if under_attack:
+        strategy = "DOMINATION"
+
+    boosts = STRATEGY_BOOSTS[strategy]
+    return {k: base[k] * boosts[k] for k in base}
+
+
+# ---------------------------------------------------------------------------
 # Component 1 — Danger Map
 # ---------------------------------------------------------------------------
 def _build_danger_map(game, civ) -> dict:
@@ -85,9 +181,8 @@ def _city_threat(city, danger) -> int:
 # ---------------------------------------------------------------------------
 # Component 3 — Attack Target Selection
 # ---------------------------------------------------------------------------
-def _select_attack_target(game, civ):
+def _select_attack_target(game, civ, flavors):
     """Pick the single best enemy city to focus on. Returns None if too weak."""
-    flavors = LEADER_FLAVORS[civ.player_index]
 
     my_strength = sum(
         UNIT_DEFS[u.unit_type]["strength"]
@@ -186,7 +281,7 @@ def _assign_roles(civ, danger, attack_target) -> tuple:
 # ---------------------------------------------------------------------------
 # Component 5 — Military Unit Action
 # ---------------------------------------------------------------------------
-def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger, assault_ready=True):
+def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger, flavors, assault_ready=True):
     if unit.moves_left == 0:
         return
 
@@ -243,7 +338,7 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
         elif role == "ATTACKER" and target_city == attack_target:
             score *= 1.5
 
-        score *= LEADER_FLAVORS[civ.player_index]["military"]
+        score *= flavors["military"]
 
         if score > best_score:
             best_score = score
@@ -383,7 +478,7 @@ def _score_settle_tile(q, r, game, civ) -> float:
     return score
 
 
-def _act_settler(game, civ, settler):
+def _act_settler(game, civ, settler, flavors):
     if settler.moves_left == 0:
         return
 
@@ -393,8 +488,6 @@ def _act_settler(game, civ, settler):
         if found_score > 15:
             game.found_city(settler)
             return
-
-    flavors = LEADER_FLAVORS[civ.player_index]
     reachable = get_reachable_tiles(settler, game.tiles, game.turn)
 
     best_score = -9999
@@ -468,11 +561,9 @@ def _act_worker(game, civ, worker):
 # ---------------------------------------------------------------------------
 # Component 8 — City Production Scoring
 # ---------------------------------------------------------------------------
-def _act_city(game, civ, city, attack_target=None):
+def _act_city(game, civ, city, flavors, attack_target=None):
     if city.production_queue:
         return
-
-    flavors = LEADER_FLAVORS[civ.player_index]
     yields = compute_city_yields(city, game.tiles, civ)
     prod_pt = max(1, yields["prod"])
 
@@ -616,11 +707,9 @@ def _act_city(game, civ, city, attack_target=None):
 # ---------------------------------------------------------------------------
 # Component 9 — Research Scoring
 # ---------------------------------------------------------------------------
-def _pick_research(game, civ):
+def _pick_research(game, civ, flavors):
     if civ.current_research:
         return
-
-    flavors = LEADER_FLAVORS[civ.player_index]
     best_score = -9999
     best_tech = None
 
@@ -667,9 +756,8 @@ def _pick_research(game, civ):
 # ---------------------------------------------------------------------------
 # Component 10 — Gold / Buy Decisions
 # ---------------------------------------------------------------------------
-def _act_gold(game, civ):
+def _act_gold(game, civ, flavors):
     """Buy the strongest affordable unit in the most threatened city if urgent."""
-    flavors = LEADER_FLAVORS[civ.player_index]
     military_count = sum(1 for u in civ.units if not u.is_civilian)
     city_count = len(civ.cities)
     urgent_need = military_count < city_count
@@ -718,9 +806,8 @@ def _act_gold(game, civ):
 # ---------------------------------------------------------------------------
 # Component 11 — Unit Upgrades
 # ---------------------------------------------------------------------------
-def _act_upgrades(game, civ):
+def _act_upgrades(game, civ, flavors):
     """Upgrade military units when affordable and the strength gain is worthwhile."""
-    flavors = LEADER_FLAVORS[civ.player_index]
     # Keep a gold reserve so we don't bankrupt ourselves upgrading
     gold_reserve = int(40 / flavors["aggression"])
 
@@ -753,9 +840,12 @@ def ai_take_turn(game, civ):
     Execute a full turn for a CPU-controlled civilization.
     All actions execute instantly (no animation).
     """
+    # Grand strategy — compute effective flavors for this turn
+    flavors = _get_effective_flavors(game, civ)
+
     # Strategic layer
     danger        = _build_danger_map(game, civ)
-    attack_target = _select_attack_target(game, civ)
+    attack_target = _select_attack_target(game, civ, flavors)
     roles, defender_cities = _assign_roles(civ, danger, attack_target)
 
     # Muster check: effective attacker count vs city HP.
@@ -786,28 +876,28 @@ def ai_take_turn(game, civ):
         assault_ready = effective_count >= min_attackers and melee_present
 
     # Research
-    _pick_research(game, civ)
+    _pick_research(game, civ, flavors)
 
     # City production
     for city in civ.cities:
-        _act_city(game, civ, city, attack_target)
+        _act_city(game, civ, city, flavors, attack_target)
 
     # Upgrade units before acting (so they fight with new stats)
-    _act_upgrades(game, civ)
+    _act_upgrades(game, civ, flavors)
 
     # Civilians first (settlers, workers), then military
     for unit in list(civ.units):
         if not unit.is_civilian:
             continue
         if unit.unit_type == "settler":
-            _act_settler(game, civ, unit)
+            _act_settler(game, civ, unit, flavors)
         elif unit.unit_type == "worker":
             _act_worker(game, civ, unit)
 
     for unit in list(civ.units):
         if unit.is_civilian:
             continue
-        _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger, assault_ready)
+        _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger, flavors, assault_ready)
 
     # Gold / buy
-    _act_gold(game, civ)
+    _act_gold(game, civ, flavors)
