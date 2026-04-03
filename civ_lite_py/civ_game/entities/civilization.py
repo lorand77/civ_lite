@@ -25,3 +25,7 @@ class Civilization:
     pending_messages: list = field(default_factory=list)  # shown at start of next turn
     research_just_completed: bool = False  # set when a tech finishes this turn
     is_cpu: bool = False
+    difficulty: str = "prince"
+    prod_mult: float = 1.0
+    food_mult: float = 1.0
+    starting_xp: int = 0

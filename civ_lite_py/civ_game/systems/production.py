@@ -54,6 +54,8 @@ def _complete_item(city, civ, game, item_key):
             hp=defn["hp_max"],
             moves_left=defn["moves"],
         )
+        if not unit.is_civilian:
+            unit.xp = civ.starting_xp
         unit_name = defn["name"]
         # Place on city tile (or nearest free tile)
         tile = game.tiles.get((city.q, city.r))

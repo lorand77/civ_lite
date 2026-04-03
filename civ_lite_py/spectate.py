@@ -28,6 +28,16 @@ from civ_game.systems.ai_d import ai_take_turn as ai_d_take_turn  # AI D: player
 from civ_game.systems.ai_e import ai_take_turn as ai_e_take_turn  # AI E: players 0, 1 (Rome, Greece)
 from civ_game.systems.score import compute_score
 
+# ── difficulty config ─────────────────────────────────────────────────────────
+
+DIFFICULTIES = {
+    "prince":  {"prod_mult": 1.0, "food_mult": 1.0, "starting_xp": 0},
+    "king":    {"prod_mult": 1.2, "food_mult": 1.2, "starting_xp": 10},
+    "emperor": {"prod_mult": 1.5, "food_mult": 1.5, "starting_xp": 20},
+}
+# Set a difficulty per player (indices 0-3: Rome, Greece, Huns, Babylon)
+PLAYER_DIFFICULTIES = ["prince", "prince", "prince", "prince"]
+
 # ── constants ────────────────────────────────────────────────────────────────
 
 SCREEN_W = 1850
@@ -288,6 +298,7 @@ def main():
         map_rows=20,
         seed=None,
         cpu_flags=[True, True, True, True],
+        difficulty_flags=PLAYER_DIFFICULTIES,
     )
 
     hex_size, offset_x, offset_y = compute_layout(game)

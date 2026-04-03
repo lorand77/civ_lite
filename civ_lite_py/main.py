@@ -362,8 +362,9 @@ def main():
     clock = pygame.time.Clock()
 
     from civ_game.ui.setup_screen import run_setup_screen
-    cpu_flags = run_setup_screen(screen)
-    game = Game(num_players=4, map_cols=32, map_rows=20, seed=None, cpu_flags=cpu_flags)
+    cpu_flags, difficulty_flags = run_setup_screen(screen)
+    game = Game(num_players=4, map_cols=32, map_rows=20, seed=None,
+                cpu_flags=cpu_flags, difficulty_flags=difficulty_flags)
     ui_state = UIState(screen=screen)
 
     # Record turn 1 baseline scores

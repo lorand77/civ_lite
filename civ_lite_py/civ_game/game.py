@@ -15,6 +15,12 @@ SCREEN_H = 1000
 HUD_HEIGHT = 180
 
 PLAYER_NAMES = ["Rome", "Greece", "The Huns", "Babylon"]
+
+DIFFICULTY_DEFS = {
+    "prince":  {"prod_mult": 1.0, "food_mult": 1.0, "starting_xp": 0},
+    "king":    {"prod_mult": 1.2, "food_mult": 1.2, "starting_xp": 10},
+    "emperor": {"prod_mult": 1.5, "food_mult": 1.5, "starting_xp": 20},
+}
 PLAYER_COLORS = [
     (220, 50,  50),
     (50,  100, 220),
@@ -72,7 +78,7 @@ class Camera:
 
 class Game:
     def __init__(self, num_players=4, map_cols=MAP_COLS, map_rows=MAP_ROWS, seed=None,
-                 cpu_flags=None):
+                 cpu_flags=None, difficulty_flags=None):
         self.num_players = num_players
         self.map_cols = map_cols
         self.map_rows = map_rows
@@ -94,6 +100,16 @@ class Game:
         else:
             for i in range(1, self.num_players):
                 self.civs[i].is_cpu = True
+
+        # Apply difficulty flags: default = prince for all
+        if difficulty_flags is not None:
+            for i, diff in enumerate(difficulty_flags[:self.num_players]):
+                d = DIFFICULTY_DEFS.get(diff, DIFFICULTY_DEFS["prince"])
+                civ = self.civs[i]
+                civ.difficulty = diff
+                civ.prod_mult = d["prod_mult"]
+                civ.food_mult = d["food_mult"]
+                civ.starting_xp = d["starting_xp"]
 
         self._place_starting_units()
 
@@ -200,7 +216,8 @@ class Game:
                           moves_left=UNIT_DEFS["worker"]["moves"])
             warrior = Unit("warrior", i, q, r,
                            hp=UNIT_DEFS["warrior"]["hp_max"],
-                           moves_left=UNIT_DEFS["warrior"]["moves"])
+                           moves_left=UNIT_DEFS["warrior"]["moves"],
+                           xp=civ.starting_xp)
 
             # Spread out civilians to adjacent tiles
             placed_civilians = [(q, r)]  # settler takes start tile

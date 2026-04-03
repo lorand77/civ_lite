@@ -7,11 +7,21 @@ NUM_GAMES   = 100
 MAX_TURNS   = 2000  # safety cap — prevents infinite loops on rare stalemates
 NUM_PLAYERS = 4
 
+# ── difficulty config ──────────────────────────────────────────────────────────
+DIFFICULTIES = {
+    "prince":  {"prod_mult": 1.0, "food_mult": 1.0, "starting_xp": 0},
+    "king":    {"prod_mult": 1.2, "food_mult": 1.2, "starting_xp": 10},
+    "emperor": {"prod_mult": 1.5, "food_mult": 1.5, "starting_xp": 20},
+}
+# Set a difficulty per player (indices 0-3: Rome, Greece, Huns, Babylon)
+PLAYER_DIFFICULTIES = ["prince", "prince", "prince", "prince"]
+
 results = []
 
 for i in range(NUM_GAMES):
     game = Game(num_players=NUM_PLAYERS, seed=i,
-                cpu_flags=[True] * NUM_PLAYERS)
+                cpu_flags=[True] * NUM_PLAYERS,
+                difficulty_flags=PLAYER_DIFFICULTIES)
 
     while game.winner is None and game.turn < MAX_TURNS:
         civ = game.current_civ()

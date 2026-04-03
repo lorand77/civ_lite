@@ -4,8 +4,8 @@ import sys
 SCREEN_W = 1850
 SCREEN_H = 1000
 
-PANEL_W  = 500
-PANEL_H  = 380
+PANEL_W  = 620
+PANEL_H  = 400
 PANEL_X  = (SCREEN_W - PANEL_W) // 2
 PANEL_Y  = (SCREEN_H - PANEL_H) // 2
 
@@ -24,6 +24,14 @@ COLOR_CPU_H   = (100, 100, 120)
 COLOR_START   = (50, 110, 50)
 COLOR_START_H = (70, 150, 70)
 
+# Difficulty button colors: (normal, hover)
+DIFF_COLORS = {
+    "prince":  ((70, 70, 90),    (100, 100, 120)),
+    "king":    ((130, 110, 30),  (170, 145, 40)),
+    "emperor": ((120, 40, 40),   (160, 60, 60)),
+}
+DIFFICULTY_ORDER = ["prince", "king", "emperor"]
+
 _font_cache = {}
 
 
@@ -33,13 +41,16 @@ def _font(size):
     return _font_cache[size]
 
 
-def run_setup_screen(screen) -> list:
+def run_setup_screen(screen) -> tuple:
     """
-    Blocking loop — renders the player setup screen and returns a list of
-    4 bools: cpu_flags[i] = True means player i is CPU-controlled.
-    Default: player 0 Human, players 1-3 CPU.
+    Blocking loop — renders the player setup screen and returns a tuple:
+      (cpu_flags, difficulty_flags)
+    cpu_flags[i] = True means player i is CPU-controlled.
+    difficulty_flags[i] = difficulty string for player i ("prince"/"king"/"emperor").
+    Default: player 0 Human/Prince, players 1-3 CPU/Prince.
     """
     is_cpu = [False, True, True, True]
+    difficulty_list = ["prince", "prince", "prince", "prince"]
     clock  = pygame.time.Clock()
 
     while True:
@@ -50,16 +61,19 @@ def run_setup_screen(screen) -> list:
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                # Check toggle buttons
                 for i in range(4):
-                    btn_rect = _toggle_rect(i)
-                    if btn_rect.collidepoint(event.pos):
+                    # CPU/Human toggle
+                    if _toggle_rect(i).collidepoint(event.pos):
                         is_cpu[i] = not is_cpu[i]
-                # Check Start button
+                    # Difficulty cycle
+                    if _difficulty_rect(i).collidepoint(event.pos):
+                        idx = DIFFICULTY_ORDER.index(difficulty_list[i])
+                        difficulty_list[i] = DIFFICULTY_ORDER[(idx + 1) % len(DIFFICULTY_ORDER)]
+                # Start button
                 if _start_rect().collidepoint(event.pos):
-                    return is_cpu
+                    return is_cpu, difficulty_list
 
-        _render(screen, is_cpu, mouse)
+        _render(screen, is_cpu, difficulty_list, mouse)
         pygame.display.flip()
         clock.tick(60)
 
@@ -73,11 +87,15 @@ def _toggle_rect(player_index) -> pygame.Rect:
     return pygame.Rect(PANEL_X + PANEL_W - 140, _row_y(player_index) + 4, 120, 36)
 
 
+def _difficulty_rect(player_index) -> pygame.Rect:
+    return pygame.Rect(PANEL_X + PANEL_W - 270, _row_y(player_index) + 4, 110, 36)
+
+
 def _start_rect() -> pygame.Rect:
     return pygame.Rect(PANEL_X + PANEL_W // 2 - 100, PANEL_Y + PANEL_H - 66, 200, 44)
 
 
-def _render(screen, is_cpu, mouse):
+def _render(screen, is_cpu, difficulty_list, mouse):
     screen.fill(COLOR_BG)
 
     # Panel
@@ -103,7 +121,17 @@ def _render(screen, is_cpu, mouse):
         name_surf = _font(26).render(PLAYER_NAMES[i], True, PLAYER_COLORS[i])
         screen.blit(name_surf, (PANEL_X + 60, row_y + 10))
 
-        # Toggle button
+        # Difficulty button
+        diff_rect = _difficulty_rect(i)
+        diff = difficulty_list[i]
+        normal_col, hover_col = DIFF_COLORS[diff]
+        diff_color = hover_col if diff_rect.collidepoint(mouse) else normal_col
+        pygame.draw.rect(screen, diff_color, diff_rect, border_radius=4)
+        pygame.draw.rect(screen, COLOR_BORDER, diff_rect, 1, border_radius=4)
+        diff_lbl = _font(22).render(diff.capitalize(), True, COLOR_TEXT)
+        screen.blit(diff_lbl, diff_lbl.get_rect(center=diff_rect.center))
+
+        # CPU/Human toggle button
         btn_rect = _toggle_rect(i)
         if is_cpu[i]:
             btn_color = COLOR_CPU_H if btn_rect.collidepoint(mouse) else COLOR_CPU

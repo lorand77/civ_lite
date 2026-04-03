@@ -49,4 +49,8 @@ def compute_city_yields(city, tiles, civ):
     # Base science: 1 per city + 1 per citizen
     totals["science"] += 1 + city.population
 
+    # Difficulty multipliers
+    totals["prod"] = int(totals["prod"] * civ.prod_mult)
+    totals["food"] = int(totals["food"] * civ.food_mult)
+
     return totals
