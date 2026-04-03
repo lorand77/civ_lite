@@ -21,7 +21,7 @@ from collections import defaultdict
 
 import pygame
 
-from civ_game.game import Game, PLAYER_COLORS, PLAYER_NAMES
+from civ_game.game import Game, PLAYER_COLORS, PLAYER_NAMES, DIFFICULTY_DEFS
 from civ_game.map.hex_grid import hex_to_pixel, hex_corners
 from civ_game.data.units import UNIT_DEFS
 from civ_game.systems.ai_d import ai_take_turn as ai_d_take_turn  # AI D: players 2, 3 (Huns, Babylon)
@@ -29,12 +29,7 @@ from civ_game.systems.ai_e import ai_take_turn as ai_e_take_turn  # AI E: player
 from civ_game.systems.score import compute_score
 
 # ── difficulty config ─────────────────────────────────────────────────────────
-
-DIFFICULTIES = {
-    "prince":  {"prod_mult": 1.0, "food_mult": 1.0, "starting_xp": 0},
-    "king":    {"prod_mult": 1.2, "food_mult": 1.2, "starting_xp": 10},
-    "emperor": {"prod_mult": 1.5, "food_mult": 1.5, "starting_xp": 20},
-}
+# DIFFICULTY_DEFS is imported from game.py — edit values there.
 # Set a difficulty per player (indices 0-3: Rome, Greece, Huns, Babylon)
 PLAYER_DIFFICULTIES = ["prince", "prince", "prince", "prince"]
 
