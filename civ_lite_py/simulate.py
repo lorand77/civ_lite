@@ -10,7 +10,7 @@ NUM_PLAYERS = 4
 # ── difficulty config ──────────────────────────────────────────────────────────
 # DIFFICULTY_DEFS is imported from game.py — edit values there.
 # Set a difficulty per player (indices 0-3: Rome, Greece, Huns, Babylon)
-PLAYER_DIFFICULTIES = ["prince", "prince", "prince", "prince"]
+PLAYER_DIFFICULTIES = ["king", "prince", "prince", "prince"]
 
 results = []
 

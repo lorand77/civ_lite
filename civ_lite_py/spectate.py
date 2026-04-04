@@ -31,7 +31,7 @@ from civ_game.systems.score import compute_score
 # ── difficulty config ─────────────────────────────────────────────────────────
 # DIFFICULTY_DEFS is imported from game.py — edit values there.
 # Set a difficulty per player (indices 0-3: Rome, Greece, Huns, Babylon)
-PLAYER_DIFFICULTIES = ["prince", "prince", "prince", "prince"]
+PLAYER_DIFFICULTIES = ["emperor", "prince", "prince", "prince"]
 
 # ── constants ────────────────────────────────────────────────────────────────
 

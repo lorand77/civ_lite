@@ -148,7 +148,9 @@ def _get_effective_flavors(game, civ) -> dict:
 def _build_danger_map(game, civ) -> dict:
     """
     Returns {(q, r): danger_value} — sum of enemy unit strengths that could
-    reach each tile in one move (approximated by hex_distance <= moves).
+    reach or attack each tile. Melee units threaten tiles within move range;
+    ranged units additionally threaten tiles within their attack range using
+    ranged_strength.
     """
     danger = {}
     for other in game.civs:
@@ -160,9 +162,14 @@ def _build_danger_map(game, civ) -> dict:
             defn = UNIT_DEFS[unit.unit_type]
             strength = defn["strength"]
             move_range = defn["moves"]
+            attack_range = defn.get("range", 0)
+            ranged_strength = defn.get("ranged_strength", 0)
             for (q, r) in game.tiles:
-                if hex_distance(unit.q, unit.r, q, r) <= move_range:
+                d = hex_distance(unit.q, unit.r, q, r)
+                if d <= move_range:
                     danger[(q, r)] = danger.get((q, r), 0) + strength
+                elif attack_range and d <= attack_range:
+                    danger[(q, r)] = danger.get((q, r), 0) + ranged_strength
     return danger
 
 
@@ -279,6 +286,28 @@ def _assign_roles(civ, danger, attack_target) -> tuple:
 
 
 # ---------------------------------------------------------------------------
+# Component 4b — BFS Distance Map (terrain-only, ignores unit obstacles)
+# ---------------------------------------------------------------------------
+def _bfs_dist_map(q, r, tiles):
+    """Returns {(q,r): steps} — BFS distance from (q,r) to every reachable tile."""
+    from collections import deque
+    from civ_game.map.terrain import TERRAIN_PASSABLE
+    dist = {(q, r): 0}
+    queue = deque([(q, r, 0)])
+    while queue:
+        cq, cr, d = queue.popleft()
+        for nq, nr in hex_neighbors(cq, cr):
+            if (nq, nr) in dist:
+                continue
+            tile = tiles.get((nq, nr))
+            if not tile or not TERRAIN_PASSABLE[tile.terrain]:
+                continue
+            dist[(nq, nr)] = d + 1
+            queue.append((nq, nr, d + 1))
+    return dist
+
+
+# ---------------------------------------------------------------------------
 # Component 5 — Military Unit Action
 # ---------------------------------------------------------------------------
 def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, danger, flavors, assault_ready=True):
@@ -345,6 +374,13 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
             best_action = ("attack", tq, tr)
 
     # 2. Score movement options
+    attack_path_dist = None
+    if role == "ATTACKER" and attack_target:
+        attack_path_dist = _bfs_dist_map(attack_target.q, attack_target.r, game.tiles)
+
+    current_danger = danger.get((unit.q, unit.r), 0)
+    should_retreat = current_danger > 0 and not attackable
+
     for (tq, tr), cost in reachable.items():
         score = 0
 
@@ -359,8 +395,8 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
                     score += 20
 
         elif role == "ATTACKER" and attack_target:
-            current_dist = hex_distance(unit.q, unit.r, attack_target.q, attack_target.r)
-            new_dist = hex_distance(tq, tr, attack_target.q, attack_target.r)
+            current_dist = attack_path_dist.get((unit.q, unit.r), 999)
+            new_dist = attack_path_dist.get((tq, tr), 999)
 
             if not assault_ready:
                 HOLD_DIST = 5
@@ -385,6 +421,24 @@ def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target, d
             tile_danger = danger.get((tq, tr), 0)
             if tile_danger > my_eff_str:
                 score -= 25
+
+        # Retreat: if in danger with no attack options, strongly prefer safer tiles
+        if should_retreat:
+            tile_danger = danger.get((tq, tr), 0)
+            if tile_danger < current_danger:
+                score += 25
+
+        # Bonus for tiles that put the unit in attack range of an enemy unit
+        unit_attack_range = defn.get("range", 1)
+        for other in game.civs:
+            if other.player_index == civ.player_index or other.is_eliminated:
+                continue
+            for eu in other.units:
+                if eu.is_civilian:
+                    continue
+                d = hex_distance(tq, tr, eu.q, eu.r)
+                if 1 <= d <= unit_attack_range:
+                    score += 15
 
         if score > best_score:
             best_score = score
