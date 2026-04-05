@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Civ Lite</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0a0a1a;
+            overflow: hidden;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        #game-canvas {
+            display: block;
+            cursor: grab;
+        }
+
+        /* HUD overlay */
+        #hud {
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            color: #ccc;
+            font-size: 13px;
+            user-select: none;
+            text-shadow: 0 1px 3px #000;
+        }
+
+        #hud h1 {
+            font-size: 18px;
+            font-weight: 700;
+            color: #e8d48b;
+            margin-bottom: 4px;
+            letter-spacing: 1px;
+        }
+
+        #hud .hint {
+            pointer-events: none;
+            margin-bottom: 8px;
+        }
+
+        #seed-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        #seed-input {
+            width: 70px;
+            background: rgba(0,0,0,0.5);
+            border: 1px solid #555;
+            border-radius: 3px;
+            color: #eee;
+            font-size: 12px;
+            padding: 3px 6px;
+            outline: none;
+        }
+
+        #regen-btn {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid #666;
+            border-radius: 3px;
+            color: #ccc;
+            font-size: 12px;
+            padding: 3px 8px;
+            cursor: pointer;
+        }
+
+        #regen-btn:hover { background: rgba(255,255,255,0.2); }
+
+        /* Tooltip shown on hover */
+        #tooltip {
+            position: fixed;
+            background: rgba(0,0,0,0.8);
+            color: #eee;
+            font-size: 12px;
+            padding: 5px 9px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            pointer-events: none;
+            display: none;
+            line-height: 1.6;
+        }
+
+        /* Legend */
+        #legend {
+            position: fixed;
+            bottom: 14px;
+            right: 14px;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: #ccc;
+            font-size: 12px;
+            pointer-events: none;
+        }
+
+        #legend .section-title {
+            color: #aaa;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+            margin-top: 8px;
+        }
+
+        #legend .section-title:first-child { margin-top: 0; }
+
+        #legend .row {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            margin-bottom: 3px;
+        }
+
+        #legend .row:last-child { margin-bottom: 0; }
+
+        .swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            border: 1px solid rgba(0,0,0,0.4);
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="game-canvas"></canvas>
+
+<div id="hud">
+    <h1>CIV LITE</h1>
+    <div class="hint">Drag to pan &nbsp;·&nbsp; Scroll to zoom</div>
+    <div id="seed-controls">
+        <label for="seed-input" style="font-size:12px;color:#aaa">Seed:</label>
+        <input id="seed-input" type="number" value="42">
+        <button id="regen-btn">New Map</button>
+    </div>
+</div>
+
+<div id="tooltip"></div>
+
+<div id="legend">
+    <div class="section-title">Terrain</div>
+    <div class="row"><div class="swatch" style="background:#6aa84f"></div> Grassland</div>
+    <div class="row"><div class="swatch" style="background:#b6d7a8"></div> Plains</div>
+    <div class="row"><div class="swatch" style="background:#996633"></div> Hills</div>
+    <div class="row"><div class="swatch" style="background:#274f13"></div> Forest</div>
+    <div class="row"><div class="swatch" style="background:#1e5ab4"></div> Ocean</div>
+    <div class="section-title">Resources</div>
+    <div class="row"><div class="dot" style="background:#a0a0a0"></div> Iron</div>
+    <div class="row"><div class="dot" style="background:#c8a064"></div> Horses</div>
+    <div class="row"><div class="dot" style="background:#ffd700"></div> Gold</div>
+    <div class="row"><div class="dot" style="background:#c0c0c0"></div> Silver</div>
+    <div class="row"><div class="dot" style="background:#b4e6ff"></div> Diamonds</div>
+</div>
+
+<script src="js/hex.js"></script>
+<script src="js/mapgen.js"></script>
+<script>
+    // --- Bootstrap ---
+    const canvas = document.getElementById('game-canvas');
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const renderer = new HexRenderer(canvas);
+
+    function loadMap(seed) {
+        const { tiles } = generateMap(32, 24, seed);
+        renderer.loadTiles(tiles);
+    }
+
+    loadMap(42);
+
+    // --- Seed / regen controls ---
+    const seedInput = document.getElementById('seed-input');
+    const regenBtn  = document.getElementById('regen-btn');
+
+    regenBtn.addEventListener('click', () => {
+        const seed = parseInt(seedInput.value, 10) || 0;
+        loadMap(seed);
+    });
+
+    seedInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') regenBtn.click();
+    });
+
+    // --- Tooltip on hover ---
+    const tooltip = document.getElementById('tooltip');
+    const RESOURCE_LABELS = {
+        iron: 'Iron', horses: 'Horses', gold: 'Gold', silver: 'Silver', diamonds: 'Diamonds',
+    };
+
+    canvas.addEventListener('mousemove', e => {
+        const rect = canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        const tile = renderer.hexAtScreen(sx, sy);
+
+        if (tile) {
+            tooltip.style.display = 'block';
+            tooltip.style.left = (e.clientX + 14) + 'px';
+            tooltip.style.top  = (e.clientY + 14) + 'px';
+            let text = `${tile.terrain.charAt(0).toUpperCase() + tile.terrain.slice(1)}`;
+            if (tile.resource) text += `\n${RESOURCE_LABELS[tile.resource] ?? tile.resource}`;
+            text += `\n(${tile.q}, ${tile.r})`;
+            tooltip.style.whiteSpace = 'pre';
+            tooltip.textContent = text;
+        } else {
+            tooltip.style.display = 'none';
+        }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+        tooltip.style.display = 'none';
+    });
+</script>
+</body>
+</html>
