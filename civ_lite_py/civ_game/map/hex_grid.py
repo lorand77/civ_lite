@@ -43,6 +43,20 @@ def hex_distance(q1, r1, q2, r2):
     return (abs(q1 - q2) + abs(q1 + r1 - q2 - r2) + abs(r1 - r2)) // 2
 
 
+def hex_line(q1, r1, q2, r2):
+    """Return list of axial hex coords on the line from (q1,r1) to (q2,r2), excluding endpoints."""
+    n = hex_distance(q1, r1, q2, r2)
+    if n == 0:
+        return []
+    results = []
+    for i in range(1, n):
+        t = i / n
+        fq = q1 + (q2 - q1) * t
+        fr = r1 + (r2 - r1) * t
+        results.append(axial_round(fq, fr))
+    return results
+
+
 def hex_ring(q, r, radius):
     """All hex coords exactly `radius` steps from (q, r)."""
     results = []

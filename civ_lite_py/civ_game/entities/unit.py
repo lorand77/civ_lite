@@ -2,8 +2,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from collections import deque
 
-from civ_game.map.hex_grid import hex_neighbors, hex_distance
-from civ_game.map.terrain import TERRAIN_PASSABLE, TERRAIN_MOVE_COST
+from civ_game.map.hex_grid import hex_neighbors, hex_distance, hex_line
+from civ_game.map.terrain import TERRAIN_PASSABLE, TERRAIN_MOVE_COST, TERRAIN_BLOCKS_LOS
 from civ_game.data.units import UNIT_DEFS
 
 
@@ -115,14 +115,24 @@ def get_attackable_tiles(unit: Unit, tiles: dict) -> set:
             elif tile.city and tile.city.owner != unit.owner:
                 targets.add((nq, nr))
     else:
-        # Ranged: all tiles within attack_range
+        # Ranged: tiles within attack_range with unobstructed line of sight.
+        # Rough terrain (hills, forest) on intermediate tiles blocks the shot,
+        # but units *in* rough terrain can still be targeted.
         for (tq, tr), tile in tiles.items():
             dist = hex_distance(unit.q, unit.r, tq, tr)
             if dist == 0 or dist > attack_range:
                 continue
-            if tile.unit and tile.unit.owner != unit.owner:
-                targets.add((tq, tr))
-            elif tile.city and tile.city.owner != unit.owner:
+            if not (tile.unit and tile.unit.owner != unit.owner) and \
+               not (tile.city and tile.city.owner != unit.owner):
+                continue
+            # Check LOS: any intermediate tile with blocking terrain cancels the shot
+            los_blocked = False
+            for (iq, ir) in hex_line(unit.q, unit.r, tq, tr):
+                itile = tiles.get((iq, ir))
+                if itile and TERRAIN_BLOCKS_LOS.get(itile.terrain, False):
+                    los_blocked = True
+                    break
+            if not los_blocked:
                 targets.add((tq, tr))
 
     return targets
