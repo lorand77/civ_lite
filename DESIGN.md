@@ -49,7 +49,7 @@ This document reflects the **actual implemented state** of the game. It is the s
         │   ├── production.py    # Production queue processing
         │   ├── tech_tree.py     # Tech prerequisites helper functions
         │   ├── yields.py        # Per-city yield calculation
-        │   ├── ai.py            # CPU AI logic (scored, threat-aware, flavor-weighted)
+        │   ├── ai_e.py          # CPU AI logic (scored, threat-aware, flavor-weighted)
         │   └── score.py         # compute_score() — used by scoreboard + win screen
         ├── ui/
         │   ├── renderer.py      # All pygame drawing + asset loading
@@ -124,6 +124,7 @@ def pixel_to_hex(px, py, offset_x=0, offset_y=0, hex_size=HEX_SIZE) -> (q, r)
 def axial_round(q, r) -> (q, r)
 def hex_neighbors(q, r) -> list[(q,r)]
 def hex_distance(q1, r1, q2, r2) -> int
+def hex_line(q1, r1, q2, r2) -> list[(q,r)]   # intermediate tiles only (excludes endpoints)
 def hex_ring(q, r, radius) -> list[(q,r)]
 def hexes_in_range(q, r, n) -> list[(q,r)]
 def hex_corners(cx, cy, hex_size=HEX_SIZE) -> list[(x,y)]   # angle = 60*i - 30°
@@ -188,6 +189,14 @@ TERRAIN_MOVE_COST = {
     "hills":     2,    # costs 2 move points to enter
     "forest":    2,
     "ocean":     99,   # impassable
+}
+
+TERRAIN_BLOCKS_LOS = {
+    "grassland": False,
+    "plains":    False,
+    "hills":     True,   # blocks ranged fire passing through
+    "forest":    True,   # blocks ranged fire passing through
+    "ocean":     False,
 }
 
 TERRAIN_COLORS = {
@@ -672,7 +681,7 @@ def get_attackable_tiles(unit, tiles) -> set {(q,r)}
 
 Returns empty set if unit is civilian or has 0 moves left.
 - Melee (range 1): adjacent tiles with any enemy unit, civilian, or city
-- Ranged: all tiles within `hex_distance <= range` with enemy unit, civilian, or city
+- Ranged: tiles within `hex_distance <= range` with enemy unit, civilian, or city — **subject to line-of-sight**. Any intermediate tile (`hex_line`) with `TERRAIN_BLOCKS_LOS = True` (hills or forest) cancels the shot. The target tile itself is not checked — units *in* rough terrain can still be shot at, but rough terrain cannot be shot *through*.
 
 ---
 

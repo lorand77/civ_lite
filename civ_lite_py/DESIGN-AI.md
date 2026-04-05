@@ -72,6 +72,7 @@ hp: int
 moves_left: int
 fortified: bool
 healing: bool
+xp: int           # experience; each point adds 1% to effective strength
 building_improvement: str | None
 build_turns_left: int
 is_civilian: bool  # property: True for settler/worker
@@ -108,7 +109,7 @@ improvement: str | None
 from civ_game.entities.unit import get_reachable_tiles, get_attackable_tiles
 
 # Hex geometry
-from civ_game.map.hex_grid import hex_distance, hex_neighbors, hexes_in_range
+from civ_game.map.hex_grid import hex_distance, hex_neighbors, hexes_in_range, hex_line
 
 # City yields
 from civ_game.systems.yields import compute_city_yields
@@ -120,7 +121,7 @@ from civ_game.systems.production import get_item_cost
 from civ_game.data.units import UNIT_DEFS, UNIT_UPGRADES
 from civ_game.data.buildings import BUILDING_DEFS
 from civ_game.data.techs import TECH_DEFS
-from civ_game.map.terrain import TERRAIN_PASSABLE, TERRAIN_YIELDS
+from civ_game.map.terrain import TERRAIN_PASSABLE, TERRAIN_YIELDS, TERRAIN_BLOCKS_LOS
 ```
 
 ### Game action methods (call these, never mutate state directly)
@@ -141,7 +142,7 @@ game.end_turn()                          # processes end-of-turn; advances curre
 
 | File | Change |
 |------|--------|
-| `civ_game/systems/ai.py` | **CREATED** — all AI logic |
+| `civ_game/systems/ai_e.py` | **CREATED** — all AI logic |
 | `civ_game/systems/score.py` | **CREATED** — `compute_score()` for scoreboard and win screen |
 | `civ_game/ui/setup_screen.py` | **CREATED** — pre-game player setup UI |
 | `civ_game/entities/civilization.py` | **MODIFIED** — added `is_cpu: bool = False` field |
@@ -158,14 +159,14 @@ Each civ leader has flavor weights that multiply into scoring functions.
 Same AI code produces distinct playstyles.
 
 ```python
-# In ai.py — top-level constant
+# In ai_e.py — top-level constant
 LEADER_FLAVORS = {
-    0: {  # Rome — balanced expansionist
-        "military":  1.1,
-        "expansion": 1.3,   # slightly more settlers
-        "science":   0.9,
-        "buildings": 1.0,
-        "aggression": 1.0,  # attack threshold multiplier
+    0: {  # Rome — balanced
+        "military":   1.1,
+        "expansion":  0.8,
+        "science":    0.9,
+        "buildings":  1.0,
+        "aggression": 1.0,
     },
     1: {  # Greece — science-leaning, attacks late with better units
         "military":  0.7,
@@ -193,6 +194,36 @@ LEADER_FLAVORS = {
 
 ---
 
+## Grand Strategy Layer
+
+Each civ re-evaluates its grand strategy every `STRATEGY_REEVAL_INTERVAL = 25` turns (or immediately if a city is under attack). The strategy multiplies on top of the base leader flavors.
+
+Three strategies:
+
+| Strategy | Military | Aggression | Expansion | Science | Buildings |
+|----------|----------|------------|-----------|---------|-----------|
+| DOMINATION | ×1.4 | ×1.3 | ×0.8 | ×0.7 | ×0.7 |
+| SCIENCE    | ×0.8 | ×0.7 | ×0.9 | ×1.5 | ×1.3 |
+| EXPANSION  | ×0.9 | ×0.8 | ×1.6 | ×0.9 | ×1.0 |
+
+```python
+_civ_strategies: dict = {}   # {player_index: {"strategy": str, "turn": int}}
+
+def _pick_strategy(game, civ, base_flavors) -> str:
+    # Scores DOMINATION, SCIENCE, EXPANSION based on unit strength,
+    # tech count, city count, land ownership, and proximity to enemies.
+    # Returns the highest-scoring strategy name.
+
+def _get_effective_flavors(game, civ) -> dict:
+    # Re-evaluates strategy if stale or if any civ city is within 4 hexes
+    # of an enemy unit (emergency override → always DOMINATION).
+    # Returns {flavor_key: base * strategy_boost} for all 5 keys.
+```
+
+`_get_effective_flavors` is called once at the top of `ai_take_turn` and the result is passed down to all component functions.
+
+---
+
 ## Component 1 — Danger Map
 
 Computes how much enemy military threat exists on each tile.
@@ -201,9 +232,9 @@ Built once at the start of each CPU turn.
 ```python
 def _build_danger_map(game, civ) -> dict:
     """
-    Returns {(q, r): danger_value} where danger_value is the sum of
-    strengths of all enemy military units that could reach that tile
-    in one turn (approximated by hex_distance <= moves).
+    Returns {(q, r): danger_value} — sum of enemy unit effective threat per tile.
+    Melee units threaten tiles within move range (using strength).
+    Ranged units additionally threaten tiles within attack range (using ranged_strength).
     """
     danger = {}
     for other in game.civs:
@@ -215,10 +246,14 @@ def _build_danger_map(game, civ) -> dict:
             defn = UNIT_DEFS[unit.unit_type]
             strength = defn["strength"]
             move_range = defn["moves"]
-            # Mark all tiles within move range as dangerous
-            for (q, r), tile in game.tiles.items():
-                if hex_distance(unit.q, unit.r, q, r) <= move_range:
+            attack_range = defn.get("range", 0)
+            ranged_strength = defn.get("ranged_strength", 0)
+            for (q, r) in game.tiles:
+                d = hex_distance(unit.q, unit.r, q, r)
+                if d <= move_range:
                     danger[(q, r)] = danger.get((q, r), 0) + strength
+                elif attack_range and d <= attack_range:
+                    danger[(q, r)] = danger.get((q, r), 0) + ranged_strength
     return danger
 ```
 
@@ -246,8 +281,7 @@ Picks the single best enemy city to focus on this turn.
 Returns None if the AI should not attack (too weak).
 
 ```python
-def _select_attack_target(game, civ) -> object:  # City | None
-    flavors = LEADER_FLAVORS[civ.player_index]
+def _select_attack_target(game, civ, flavors) -> object:  # City | None
 
     my_strength = sum(
         UNIT_DEFS[u.unit_type]["strength"]
@@ -370,139 +404,151 @@ Retrieve with `roles.get(id(unit) + 10000)`.
 Main function for each military unit. Scores available actions, executes highest.
 
 ```python
-def _act_military_unit(game, civ, unit, roles, attack_target, danger):
+def _act_military_unit(game, civ, unit, roles, defender_cities, attack_target,
+                       danger, flavors, assault_ready=True):
     if unit.moves_left == 0:
         return
 
     role = roles.get(id(unit), "PATROL")
     defn = UNIT_DEFS[unit.unit_type]
+    xp_factor = 1.0 + unit.xp * 0.01
+    my_eff_str = defn["strength"] * xp_factor
 
-    # --- Score all candidate actions ---
     best_score = -9999
-    best_action = None  # ("attack", q, r) | ("move", q, r, cost) | ("fortify",) | ("heal",)
+    best_action = None
 
-    attackable = get_attackable_tiles(unit, game.tiles)
-    reachable = get_reachable_tiles(unit, game.tiles, game.turn)
+    attackable = get_attackable_tiles(unit, game.tiles)  # LOS-aware for ranged
+    reachable  = get_reachable_tiles(unit, game.tiles, game.turn)
 
-    # 1. Score attack options
+    # 1. Score attack options (from current position only)
     for (tq, tr) in attackable:
         tile = game.tiles.get((tq, tr))
-        if not tile:
-            continue
-
+        if not tile: continue
         target_unit = tile.unit or tile.civilian
         target_city = tile.city
-
         score = 0
+        if unit.hp < 30: continue  # too wounded to attack
 
         if target_unit:
-            t_defn = UNIT_DEFS[target_unit.unit_type]
-            t_str = t_defn["strength"]
-            my_str = defn["strength"]
-            hp_ratio = unit.hp / defn["hp_max"]
-
-            score += (my_str - t_str) * 4        # prefer winnable fights
-            score += (100 - target_unit.hp) * 0.3 # prefer wounded targets
-            score -= (1.0 - hp_ratio) * 30        # don't attack when badly wounded
-
-            if target_city and target_city.owner != civ.player_index:
-                score += 20                        # bonus: attack is also on a city tile
-
+            t_str = UNIT_DEFS[target_unit.unit_type]["strength"]
+            score += (my_eff_str - t_str) * 4
+            score += (100 - target_unit.hp) * 0.3
         elif target_city and target_city.owner != civ.player_index:
-            score += 30
-            score += (50 - target_city.hp) * 0.5  # prefer damaged cities
+            score += 30 + (50 - target_city.hp) * 0.5
             if target_city == attack_target:
-                score += 25                        # matches our strategic target
+                score += 25
+            if role == "ATTACKER":
+                score *= 1.5
 
-        # Role modifiers
-        if role == "DEFENDER":
-            score *= 0.4    # defenders rarely attack unless it's right next to them
-        elif role == "ATTACKER" and target_city == attack_target:
-            score *= 1.5    # attackers strongly prefer hitting the target city
-
-        # Apply aggression flavor
-        score *= LEADER_FLAVORS[civ.player_index]["military"]
-
+        score *= flavors["military"]
         if score > best_score:
             best_score = score
             best_action = ("attack", tq, tr)
 
     # 2. Score movement options
+    # ATTACKER: use BFS path distance (not straight-line) so units navigate terrain
+    attack_path_dist = None
+    if role == "ATTACKER" and attack_target:
+        attack_path_dist = _bfs_dist_map(attack_target.q, attack_target.r, game.tiles)
+
+    # Retreat: if on a dangerous tile with no attack options, prefer safer tiles
+    current_danger = danger.get((unit.q, unit.r), 0)
+    should_retreat = current_danger > 0 and not attackable
+
     for (tq, tr), cost in reachable.items():
         score = 0
 
         if role == "DEFENDER":
-            assigned_city = roles.get(id(unit) + 10000)
+            assigned_city = defender_cities.get(id(unit))
             if assigned_city:
                 current_dist = hex_distance(unit.q, unit.r, assigned_city.q, assigned_city.r)
-                new_dist = hex_distance(tq, tr, assigned_city.q, assigned_city.r)
-                score = (current_dist - new_dist) * 15  # reward closing on city
-                # Bonus for being ON the city tile
+                new_dist     = hex_distance(tq, tr, assigned_city.q, assigned_city.r)
+                score = (current_dist - new_dist) * 15
                 tile = game.tiles.get((tq, tr))
                 if tile and tile.city == assigned_city:
                     score += 20
 
         elif role == "ATTACKER" and attack_target:
-            current_dist = hex_distance(unit.q, unit.r, attack_target.q, attack_target.r)
-            new_dist = hex_distance(tq, tr, attack_target.q, attack_target.r)
+            current_dist = attack_path_dist.get((unit.q, unit.r), 999)
+            new_dist     = attack_path_dist.get((tq, tr), 999)
+            if not assault_ready:
+                HOLD_DIST = 5
+                if new_dist < HOLD_DIST:
+                    continue  # staging perimeter — don't advance yet
             score = (current_dist - new_dist) * 12
-
-            # Don't charge alone into high-danger tiles
             tile_danger = danger.get((tq, tr), 0)
-            if tile_danger > defn["strength"] * 1.5:
+            if tile_danger > my_eff_str * 1.5:
                 score -= 40
 
         else:  # PATROL
-            # Move toward nearest enemy
-            nearest_enemy_dist = 999
-            for other in game.civs:
-                if other.player_index == civ.player_index or other.is_eliminated:
-                    continue
-                for eu in other.units:
-                    d = hex_distance(tq, tr, eu.q, eu.r)
-                    nearest_enemy_dist = min(nearest_enemy_dist, d)
+            nearest_enemy_dist = min(
+                (hex_distance(tq, tr, eu.q, eu.r)
+                 for other in game.civs
+                 if other.player_index != civ.player_index and not other.is_eliminated
+                 for eu in other.units),
+                default=999
+            )
             score = max(0, 10 - nearest_enemy_dist)
-
-            # Avoid high-danger tiles while patrolling
             tile_danger = danger.get((tq, tr), 0)
-            if tile_danger > defn["strength"]:
+            if tile_danger > my_eff_str:
                 score -= 25
+
+        # Retreat bonus: if in danger with no attack option, prefer safer tiles
+        if should_retreat:
+            if danger.get((tq, tr), 0) < current_danger:
+                score += 25
+
+        # Bonus: tile puts unit in attack range of an enemy unit next turn
+        unit_attack_range = defn.get("range", 1)
+        for other in game.civs:
+            if other.player_index == civ.player_index or other.is_eliminated: continue
+            for eu in other.units:
+                if eu.is_civilian: continue
+                d = hex_distance(tq, tr, eu.q, eu.r)
+                if 1 <= d <= unit_attack_range:
+                    score += 15
 
         if score > best_score:
             best_score = score
             best_action = ("move", tq, tr, cost)
 
     # 3. Score fortify
-    fortify_score = 5
     tile = game.tiles.get((unit.q, unit.r))
-    if tile and tile.city and tile.city.owner == civ.player_index:
-        fortify_score += 10
-    if role == "DEFENDER":
-        fortify_score += 15
-    if unit.hp < 50:
-        fortify_score += 20  # injured: prefer to stop and heal
-
+    in_city = tile and tile.city and tile.city.owner == civ.player_index
+    fortify_score = 5
+    if in_city:         fortify_score += 10
+    if role == "DEFENDER": fortify_score += 15
     if fortify_score > best_score:
         best_score = fortify_score
         best_action = ("fortify",)
 
-    # --- Execute best action ---
-    if not best_action:
-        return
+    # 4. Score heal
+    hp_max = defn["hp_max"]
+    if unit.hp < hp_max:
+        missing = hp_max - unit.hp
+        heal_score = missing * 0.3
+        if in_city: heal_score += 10
+        if heal_score > best_score:
+            best_action = ("heal",)
 
+    # Execute
     if best_action[0] == "attack":
-        _, tq, tr = best_action
-        game.do_attack(unit, tq, tr)
-
+        game.do_attack(unit, best_action[1], best_action[2])
     elif best_action[0] == "move":
-        _, tq, tr, cost = best_action
-        if not game.tiles.get((tq, tr)):
-            return
-        game.move_unit(unit, tq, tr, cost=cost)
-
+        game.move_unit(unit, best_action[1], best_action[2], cost=best_action[3])
     elif best_action[0] == "fortify":
-        unit.fortified = True
-        unit.moves_left = 0
+        unit.fortified = True; unit.moves_left = 0
+    elif best_action[0] == "heal":
+        unit.healing = True; unit.moves_left = 0
+```
+
+### Helper: `_bfs_dist_map`
+
+Computes step-count (not move-cost) from a target tile to all reachable tiles, ignoring unit obstacles. Used by ATTACKER movement scoring to correctly reward alternate routes around terrain.
+
+```python
+def _bfs_dist_map(q, r, tiles) -> dict:
+    """Returns {(q,r): steps} via BFS from (q,r), terrain passability only."""
 ```
 
 ---
@@ -839,6 +885,25 @@ def _act_gold(game, civ):
 
 ---
 
+## Component 11 — Unit Upgrades
+
+Called before unit actions so units fight with updated stats. Upgrades if affordable and the strength gain is meaningful.
+
+```python
+def _act_upgrades(game, civ, flavors):
+    gold_reserve = int(40 / flavors["aggression"])  # aggressive civs spend more
+    for unit in list(civ.units):
+        if unit.is_civilian or unit.moves_left == 0: continue
+        path = UNIT_UPGRADES.get(unit.unit_type)     # e.g. warrior → swordsman
+        if not path: continue
+        target_type, gold_cost = path
+        if civ.gold - gold_cost < gold_reserve: continue
+        if UNIT_DEFS[target_type]["strength"] <= UNIT_DEFS[unit.unit_type]["strength"]: continue
+        game.upgrade_unit(unit)
+```
+
+---
+
 ## Main AI Entry Point
 
 The top-level function called once per CPU civ per turn.
@@ -849,34 +914,41 @@ def ai_take_turn(game, civ):
     Execute a full turn for a CPU-controlled civilization.
     All actions execute instantly (no animation).
     """
-    # === Strategic layer ===
-    danger       = _build_danger_map(game, civ)
-    attack_target = _select_attack_target(game, civ)
-    roles        = _assign_roles(civ, danger, attack_target)
+    # Grand strategy — compute effective flavors (base × strategy boosts)
+    flavors = _get_effective_flavors(game, civ)
 
-    # === Research ===
-    _pick_research(game, civ)
+    # Strategic layer
+    danger        = _build_danger_map(game, civ)
+    attack_target = _select_attack_target(game, civ, flavors)
+    roles, defender_cities = _assign_roles(civ, danger, attack_target)
 
-    # === City production ===
+    # Assault readiness: enough ATTACKER units mustered near target?
+    # min_attackers scales with city HP; requires at least one melee unit.
+    assault_ready = True
+    if attack_target:
+        # ... muster check (see code) ...
+
+    # Research
+    _pick_research(game, civ, flavors)
+
+    # City production
     for city in civ.cities:
-        _act_city(game, civ, city)
+        _act_city(game, civ, city, flavors, attack_target)
 
-    # === Units ===
-    # Process in consistent order: settlers first, workers, military last
-    for unit in list(civ.units):  # copy: list may mutate if unit is removed
-        if not unit.is_civilian:
-            continue
-        if unit.unit_type == "settler":
-            _act_settler(game, civ, unit)
-        elif unit.unit_type == "worker":
-            _act_worker(game, civ, unit)
+    # Upgrade units before acting (fight with new stats)
+    _act_upgrades(game, civ, flavors)
+
+    # Civilians first (settlers, workers), then military
+    for unit in list(civ.units):
+        if unit.unit_type == "settler": _act_settler(game, civ, unit, flavors)
+        elif unit.unit_type == "worker": _act_worker(game, civ, unit)
 
     for unit in list(civ.units):
-        if unit.is_civilian:
-            continue
-        _act_military_unit(game, civ, unit, roles, attack_target, danger)
+        if not unit.is_civilian:
+            _act_military_unit(game, civ, unit, roles, defender_cities,
+                               attack_target, danger, flavors, assault_ready)
 
-    # === Gold / buy ===
+    # Gold / buy
     _act_gold(game, civ)
 ```
 
