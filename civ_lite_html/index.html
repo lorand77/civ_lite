@@ -10,71 +10,150 @@
         body {
             background: #0a0a1a;
             overflow: hidden;
-            font-family: 'Segoe UI', sans-serif;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            display: flex;
+            height: 100vh;
+            color: #ccc;
         }
 
+        /* ---- Canvas ---- */
         #game-canvas {
+            flex: 1;
             display: block;
             cursor: grab;
+            min-width: 0;
         }
 
-        /* HUD overlay */
-        #hud {
-            position: fixed;
-            top: 12px;
-            left: 12px;
-            color: #ccc;
+        /* ---- Sidebar ---- */
+        #sidebar {
+            width: 272px;
+            flex-shrink: 0;
+            background: #111827;
+            border-left: 1px solid #2a3040;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .panel {
+            padding: 10px 12px;
+            border-bottom: 1px solid #1e2840;
+        }
+
+        .panel-title {
             font-size: 13px;
-            user-select: none;
-            text-shadow: 0 1px 3px #000;
-        }
-
-        #hud h1 {
-            font-size: 18px;
             font-weight: 700;
             color: #e8d48b;
-            margin-bottom: 4px;
-            letter-spacing: 1px;
+            margin-bottom: 5px;
+            letter-spacing: 0.5px;
         }
 
-        #hud .hint {
-            pointer-events: none;
-            margin-bottom: 8px;
-        }
-
-        #seed-controls {
+        .stat-row {
             display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        #seed-input {
-            width: 70px;
-            background: rgba(0,0,0,0.5);
-            border: 1px solid #555;
-            border-radius: 3px;
-            color: #eee;
+            justify-content: space-between;
             font-size: 12px;
-            padding: 3px 6px;
-            outline: none;
+            margin-bottom: 2px;
+            color: #bbb;
+        }
+        .stat-row span { color: #eee; }
+
+        /* Turn / civ header */
+        #turn-label {
+            font-size: 15px;
+            font-weight: 700;
+            color: #e8d48b;
+            margin-bottom: 6px;
         }
 
-        #regen-btn {
-            background: rgba(255,255,255,0.1);
-            border: 1px solid #666;
+        /* Progress bar */
+        .pbar-wrap {
+            background: #1a2030;
             border-radius: 3px;
+            height: 7px;
+            margin: 3px 0 5px;
+            overflow: hidden;
+        }
+        .pbar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.2s;
+        }
+
+        /* Action buttons */
+        .action-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px;
+            margin-top: 6px;
+        }
+
+        button {
+            background: #1e2d40;
+            border: 1px solid #2e4060;
+            border-radius: 4px;
             color: #ccc;
             font-size: 12px;
-            padding: 3px 8px;
+            padding: 5px 8px;
             cursor: pointer;
+            text-align: center;
+            transition: background 0.15s;
+        }
+        button:hover:not(:disabled) { background: #2a3f5a; color: #fff; }
+        button:disabled { opacity: 0.35; cursor: default; }
+        button.primary {
+            background: #1e3d1e;
+            border-color: #2e5a2e;
+            color: #8fe88f;
+        }
+        button.primary:hover:not(:disabled) { background: #28502a; }
+        button.danger {
+            background: #3d1e1e;
+            border-color: #5a2e2e;
+            color: #e88f8f;
         }
 
-        #regen-btn:hover { background: rgba(255,255,255,0.2); }
+        /* End turn */
+        #end-turn-btn {
+            width: 100%;
+            padding: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            background: #1a3a2a;
+            border-color: #2a5a3a;
+            color: #6ed48a;
+            letter-spacing: 0.5px;
+        }
+        #end-turn-btn:hover { background: #224a34; }
 
-        /* Tooltip shown on hover */
+        /* Production list */
+        .prod-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px 6px;
+            border-radius: 3px;
+            margin-bottom: 2px;
+            cursor: pointer;
+            font-size: 12px;
+            background: #161e2e;
+            border: 1px solid transparent;
+        }
+        .prod-item:hover { background: #1e2a40; border-color: #3a4a60; }
+        .prod-item.active { border-color: #e8d48b; background: #1e2820; }
+        .prod-item .cost { color: #e8d48b; font-size: 11px; }
+
+        /* Messages */
+        #msg-text {
+            font-size: 12px;
+            color: #e8c87a;
+            line-height: 1.5;
+        }
+
+        /* Tooltip */
         #tooltip {
             position: fixed;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.85);
             color: #eee;
             font-size: 12px;
             padding: 5px 9px;
@@ -82,149 +161,657 @@
             border: 1px solid #444;
             pointer-events: none;
             display: none;
+            white-space: pre;
             line-height: 1.6;
+            z-index: 10;
         }
 
-        /* Legend */
-        #legend {
-            position: fixed;
-            bottom: 14px;
-            right: 14px;
-            background: rgba(0,0,0,0.6);
-            border: 1px solid #333;
-            border-radius: 6px;
-            padding: 8px 12px;
-            color: #ccc;
-            font-size: 12px;
-            pointer-events: none;
-        }
+        /* Hidden utility */
+        .hidden { display: none !important; }
 
-        #legend .section-title {
-            color: #aaa;
+        /* Separator label */
+        .section-label {
             font-size: 10px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 4px;
-            margin-top: 8px;
+            letter-spacing: 0.8px;
+            color: #5a6a80;
+            margin: 4px 0 3px;
         }
 
-        #legend .section-title:first-child { margin-top: 0; }
-
-        #legend .row {
-            display: flex;
-            align-items: center;
-            gap: 7px;
-            margin-bottom: 3px;
-        }
-
-        #legend .row:last-child { margin-bottom: 0; }
-
-        .swatch {
-            width: 14px;
-            height: 14px;
-            border-radius: 2px;
-            flex-shrink: 0;
-        }
-
-        .dot {
-            width: 10px;
-            height: 10px;
+        /* Civ color dot */
+        .civ-dot {
+            display: inline-block;
+            width: 8px; height: 8px;
             border-radius: 50%;
-            flex-shrink: 0;
-            border: 1px solid rgba(0,0,0,0.4);
+            margin-right: 5px;
+            vertical-align: middle;
         }
+
+        #seed-row {
+            display: flex; gap: 5px; align-items: center; margin-top: 6px;
+        }
+        #seed-input {
+            width: 60px; background: rgba(0,0,0,0.4); border: 1px solid #333;
+            border-radius: 3px; color: #eee; font-size: 11px; padding: 2px 5px;
+        }
+        #new-map-btn { font-size: 11px; padding: 3px 6px; }
+
+        /* Scrollable list inside panel */
+        .scroll-list { max-height: 180px; overflow-y: auto; }
     </style>
 </head>
 <body>
 
 <canvas id="game-canvas"></canvas>
 
-<div id="hud">
-    <h1>CIV LITE</h1>
-    <div class="hint">Drag to pan &nbsp;·&nbsp; Scroll to zoom</div>
-    <div id="seed-controls">
-        <label for="seed-input" style="font-size:12px;color:#aaa">Seed:</label>
-        <input id="seed-input" type="number" value="42">
-        <button id="regen-btn">New Map</button>
+<!-- ============================================================ -->
+<!-- Sidebar                                                       -->
+<!-- ============================================================ -->
+<aside id="sidebar">
+
+    <!-- Civ / turn info -->
+    <div class="panel" id="civ-panel">
+        <div id="turn-label">Turn 1</div>
+        <div class="stat-row">
+            Gold <span id="stat-gold">0</span>
+        </div>
+        <div class="stat-row">
+            Science <span id="stat-sci">0</span>
+        </div>
+        <div class="stat-row">
+            Culture <span id="stat-culture">0</span>
+        </div>
+        <div style="margin-top:6px">
+            <div class="stat-row">
+                Research: <span id="stat-research">—</span>
+            </div>
+            <div class="pbar-wrap">
+                <div class="pbar-fill" id="research-bar" style="width:0%;background:#5080d0"></div>
+            </div>
+        </div>
+        <!-- New map controls -->
+        <div id="seed-row">
+            <label style="font-size:11px;color:#5a6a80">Seed</label>
+            <input id="seed-input" type="number" value="42">
+            <button id="new-map-btn">New Game</button>
+        </div>
     </div>
-</div>
+
+    <!-- Selected unit -->
+    <div class="panel hidden" id="unit-panel">
+        <div class="panel-title" id="unit-title">Unit</div>
+        <div class="stat-row">HP <span id="unit-hp"></span></div>
+        <div class="pbar-wrap">
+            <div class="pbar-fill" id="unit-hp-bar" style="width:100%;background:#4c4"></div>
+        </div>
+        <div class="stat-row">Moves <span id="unit-moves"></span></div>
+        <div class="stat-row">XP <span id="unit-xp"></span></div>
+        <div class="stat-row hidden" id="unit-build-row">Building <span id="unit-build"></span></div>
+        <div class="action-grid" id="unit-actions"></div>
+    </div>
+
+    <!-- Selected city -->
+    <div class="panel hidden" id="city-panel">
+        <div class="panel-title" id="city-title">City</div>
+        <div class="stat-row">Population <span id="city-pop"></span></div>
+        <div class="stat-row">HP <span id="city-hp"></span></div>
+        <div class="pbar-wrap">
+            <div class="pbar-fill" id="city-hp-bar" style="width:100%;background:#5080d0"></div>
+        </div>
+        <div class="stat-row">Food <span id="city-food"></span></div>
+        <div class="pbar-wrap">
+            <div class="pbar-fill" id="city-food-bar" style="width:0%;background:#4c4"></div>
+        </div>
+        <div style="margin-top:6px">
+            <div class="stat-row">Yields: <span id="city-yields"></span></div>
+        </div>
+        <div style="margin-top:8px">
+            <div class="section-label">Production</div>
+            <div id="city-production-info" style="font-size:12px;color:#bbb;margin-bottom:4px"></div>
+            <div class="scroll-list" id="production-list"></div>
+        </div>
+        <div style="margin-top:6px">
+            <div class="section-label">Buildings</div>
+            <div id="city-buildings" style="font-size:11px;color:#8a9aaa;line-height:1.6"></div>
+        </div>
+    </div>
+
+    <!-- Tech panel (when no unit/city selected) -->
+    <div class="panel hidden" id="tech-panel">
+        <div class="panel-title">Research</div>
+        <div class="scroll-list" id="tech-list"></div>
+    </div>
+
+    <!-- Messages -->
+    <div class="panel hidden" id="msg-panel">
+        <div class="section-label">Event</div>
+        <div id="msg-text"></div>
+    </div>
+
+    <!-- Spacer -->
+    <div style="flex:1"></div>
+
+    <!-- End turn -->
+    <div class="panel">
+        <button id="end-turn-btn">End Turn ▶</button>
+    </div>
+
+</aside>
 
 <div id="tooltip"></div>
 
-<div id="legend">
-    <div class="section-title">Terrain</div>
-    <div class="row"><div class="swatch" style="background:#6aa84f"></div> Grassland</div>
-    <div class="row"><div class="swatch" style="background:#b6d7a8"></div> Plains</div>
-    <div class="row"><div class="swatch" style="background:#996633"></div> Hills</div>
-    <div class="row"><div class="swatch" style="background:#274f13"></div> Forest</div>
-    <div class="row"><div class="swatch" style="background:#1e5ab4"></div> Ocean</div>
-    <div class="section-title">Resources</div>
-    <div class="row"><div class="dot" style="background:#a0a0a0"></div> Iron</div>
-    <div class="row"><div class="dot" style="background:#c8a064"></div> Horses</div>
-    <div class="row"><div class="dot" style="background:#ffd700"></div> Gold</div>
-    <div class="row"><div class="dot" style="background:#c0c0c0"></div> Silver</div>
-    <div class="row"><div class="dot" style="background:#b4e6ff"></div> Diamonds</div>
-</div>
-
+<!-- ============================================================ -->
+<!-- Scripts                                                       -->
+<!-- ============================================================ -->
 <script src="js/hex.js"></script>
 <script src="js/mapgen.js"></script>
+<script src="js/state.js"></script>
+<script src="js/game.js"></script>
 <script>
-    // --- Bootstrap ---
-    const canvas = document.getElementById('game-canvas');
-    canvas.width  = window.innerWidth;
+// ============================================================
+// Bootstrap
+// ============================================================
+
+const SIDEBAR_W = 272;
+
+const canvas  = document.getElementById('game-canvas');
+canvas.width  = window.innerWidth - SIDEBAR_W;
+canvas.height = window.innerHeight;
+
+// Game + renderer instances
+let game, renderer;
+let _rendererReady = false;
+
+// Selection state
+let sel = { unit: null, city: null, reachable: new Map(), attackable: new Set() };
+
+// Last combat/event message
+let lastMsg = '';
+
+// ============================================================
+// Init / New Game
+// ============================================================
+
+function initGame(seed) {
+    game = new Game({ seed });
+    if (!_rendererReady) {
+        renderer = new HexRenderer(canvas, PLAYER_COLORS);
+        renderer.onClick = handleClick;
+        renderer.onHover = handleHover;
+        _rendererReady = true;
+    }
+    renderer.loadTiles(game.tiles);
+    deselect();
+    updateSidebar();
+    renderer.draw();
+}
+
+// Start with seed 42
+initGame(42);
+
+document.getElementById('new-map-btn').addEventListener('click', () => {
+    const seed = parseInt(document.getElementById('seed-input').value, 10) || 0;
+    initGame(seed);
+});
+document.getElementById('seed-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('new-map-btn').click();
+});
+
+window.addEventListener('resize', () => {
+    canvas.width  = window.innerWidth - SIDEBAR_W;
     canvas.height = window.innerHeight;
+    renderer.draw();
+});
 
-    const renderer = new HexRenderer(canvas);
+// ============================================================
+// Selection helpers
+// ============================================================
 
-    function loadMap(seed) {
-        const { tiles } = generateMap(32, 24, seed);
-        renderer.loadTiles(tiles);
+function selectUnit(unit) {
+    sel.unit      = unit;
+    sel.city      = null;
+    sel.reachable = getReachableTiles(unit, game.tiles, game.turn);
+    sel.attackable= getAttackableTiles(unit, game.tiles);
+    renderer.setOverlays({
+        reachable:  sel.reachable,
+        attackable: sel.attackable,
+        selected:   `${unit.q},${unit.r}`,
+    });
+    document.getElementById('tech-panel').classList.add('hidden');
+}
+
+function selectCity(city) {
+    sel.unit      = null;
+    sel.city      = city;
+    sel.reachable = new Map();
+    sel.attackable= new Set();
+    renderer.setOverlays({ selected: `${city.q},${city.r}` });
+    document.getElementById('tech-panel').classList.add('hidden');
+}
+
+function deselect() {
+    sel.unit      = null;
+    sel.city      = null;
+    sel.reachable = new Map();
+    sel.attackable= new Set();
+    renderer.clearOverlays();
+    document.getElementById('unit-panel').classList.add('hidden');
+    document.getElementById('city-panel').classList.add('hidden');
+    // Show tech panel if civ has no current research
+    const civ = game.currentCiv();
+    if (!civ.currentResearch) {
+        document.getElementById('tech-panel').classList.remove('hidden');
+        renderTechList(civ);
+    } else {
+        document.getElementById('tech-panel').classList.add('hidden');
+    }
+}
+
+// ============================================================
+// Click handler
+// ============================================================
+
+function handleClick(tile) {
+    if (!tile) { deselect(); renderer.draw(); updateSidebar(); return; }
+
+    const key = `${tile.q},${tile.r}`;
+    const civ = game.currentCiv();
+
+    // If a unit is selected: move or attack
+    if (sel.unit) {
+        if (sel.reachable.has(key)) {
+            game.moveUnit(sel.unit, tile.q, tile.r, sel.reachable.get(key));
+            if (sel.unit.movesLeft === 0) {
+                deselect();
+            } else {
+                selectUnit(sel.unit); // recompute reachable from new position
+            }
+            renderer.draw();
+            updateSidebar();
+            return;
+        }
+        if (sel.attackable.has(key)) {
+            const msg = game.doAttack(sel.unit, tile.q, tile.r);
+            showMessage(msg);
+            deselect();
+            renderer.draw();
+            updateSidebar();
+            return;
+        }
     }
 
-    loadMap(42);
+    // Select own unit or city
+    const unit = tile.unit ?? tile.civilian;
+    if (unit && unit.owner === game.currentPlayer) {
+        selectUnit(unit);
+        updateSidebar();
+        renderer.draw();
+        return;
+    }
+    if (tile.city && tile.city.owner === game.currentPlayer) {
+        selectCity(tile.city);
+        updateSidebar();
+        renderer.draw();
+        return;
+    }
 
-    // --- Seed / regen controls ---
-    const seedInput = document.getElementById('seed-input');
-    const regenBtn  = document.getElementById('regen-btn');
+    // Click empty / enemy tile → deselect
+    deselect();
+    renderer.draw();
+    updateSidebar();
+}
 
-    regenBtn.addEventListener('click', () => {
-        const seed = parseInt(seedInput.value, 10) || 0;
-        loadMap(seed);
-    });
+// ============================================================
+// Hover tooltip
+// ============================================================
 
-    seedInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter') regenBtn.click();
-    });
+const tooltip = document.getElementById('tooltip');
 
-    // --- Tooltip on hover ---
-    const tooltip = document.getElementById('tooltip');
-    const RESOURCE_LABELS = {
-        iron: 'Iron', horses: 'Horses', gold: 'Gold', silver: 'Silver', diamonds: 'Diamonds',
+function handleHover(tile, e) {
+    if (!tile || !e) { tooltip.style.display = 'none'; return; }
+
+    const lines = [];
+    const t = tile.terrain.charAt(0).toUpperCase() + tile.terrain.slice(1);
+    lines.push(t + (tile.resource ? ` · ${tile.resource}` : '')
+                 + (tile.improvement ? ` · ${tile.improvement}` : ''));
+    if (tile.owner !== null) lines.push(`Owner: ${game.civs[tile.owner]?.name ?? '?'}`);
+    if (tile.city) lines.push(`City: ${tile.city.name} (HP ${tile.city.hp}/50)`);
+    const u = tile.unit ?? tile.civilian;
+    if (u) lines.push(`Unit: ${u.name} HP ${u.hp}/${u.hpMax}  Moves ${u.movesLeft}`);
+    lines.push(`(${tile.q}, ${tile.r})`);
+
+    tooltip.textContent = lines.join('\n');
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX + 14) + 'px';
+    tooltip.style.top  = (e.clientY + 14) + 'px';
+}
+
+// ============================================================
+// Sidebar rendering
+// ============================================================
+
+function updateSidebar() {
+    const civ = game.currentCiv();
+
+    // Turn / civ label
+    const dot = `<span class="civ-dot" style="background:${PLAYER_COLORS[civ.playerIndex]}"></span>`;
+    document.getElementById('turn-label').innerHTML =
+        `Turn ${game.turn} — ${dot}${civ.name}`;
+
+    // Stats
+    document.getElementById('stat-gold').textContent    = civ.gold;
+    document.getElementById('stat-sci').textContent     = civ.science;
+    document.getElementById('stat-culture').textContent = civ.culture;
+
+    // Research bar
+    if (civ.currentResearch) {
+        const tech = TECH_DEFS[civ.currentResearch];
+        const pct  = Math.min(100, Math.round(civ.science / tech.science_cost * 100));
+        document.getElementById('stat-research').textContent = `${tech.name} (${civ.science}/${tech.science_cost})`;
+        document.getElementById('research-bar').style.width = pct + '%';
+    } else {
+        document.getElementById('stat-research').textContent = '—';
+        document.getElementById('research-bar').style.width = '0%';
+    }
+
+    // Entity panels
+    if (sel.unit) {
+        renderUnitPanel(sel.unit, civ);
+        document.getElementById('city-panel').classList.add('hidden');
+    } else if (sel.city) {
+        renderCityPanel(sel.city, civ);
+        document.getElementById('unit-panel').classList.add('hidden');
+    } else {
+        document.getElementById('unit-panel').classList.add('hidden');
+        document.getElementById('city-panel').classList.add('hidden');
+    }
+}
+
+// ---- Unit panel ----
+
+function renderUnitPanel(unit, civ) {
+    const panel = document.getElementById('unit-panel');
+    panel.classList.remove('hidden');
+
+    const defn = UNIT_DEFS[unit.unitType];
+    document.getElementById('unit-title').textContent = unit.name;
+    document.getElementById('unit-hp').textContent    = `${unit.hp}/${unit.hpMax}`;
+    document.getElementById('unit-moves').textContent = `${unit.movesLeft}/${defn.moves}`;
+    document.getElementById('unit-xp').textContent    = unit.xp;
+
+    // HP bar colour
+    const hpPct = unit.hp / unit.hpMax * 100;
+    const bar   = document.getElementById('unit-hp-bar');
+    bar.style.width  = hpPct + '%';
+    bar.style.background = hpPct > 60 ? '#4c4' : hpPct > 30 ? '#cc4' : '#c44';
+
+    // Build info
+    const buildRow = document.getElementById('unit-build-row');
+    if (unit.buildingImprovement) {
+        buildRow.classList.remove('hidden');
+        document.getElementById('unit-build').textContent =
+            `${unit.buildingImprovement} (${unit.buildTurnsLeft}t)`;
+    } else {
+        buildRow.classList.add('hidden');
+    }
+
+    // Action buttons
+    const actions = document.getElementById('unit-actions');
+    actions.innerHTML = '';
+
+    const addBtn = (label, cb, cls = '', disabled = false) => {
+        const btn = document.createElement('button');
+        btn.textContent = label;
+        if (cls) btn.className = cls;
+        btn.disabled = disabled;
+        btn.addEventListener('click', cb);
+        actions.appendChild(btn);
     };
 
-    canvas.addEventListener('mousemove', e => {
-        const rect = canvas.getBoundingClientRect();
-        const sx = e.clientX - rect.left;
-        const sy = e.clientY - rect.top;
-        const tile = renderer.hexAtScreen(sx, sy);
+    const hasMoves = unit.movesLeft > 0;
 
-        if (tile) {
-            tooltip.style.display = 'block';
-            tooltip.style.left = (e.clientX + 14) + 'px';
-            tooltip.style.top  = (e.clientY + 14) + 'px';
-            let text = `${tile.terrain.charAt(0).toUpperCase() + tile.terrain.slice(1)}`;
-            if (tile.resource) text += `\n${RESOURCE_LABELS[tile.resource] ?? tile.resource}`;
-            text += `\n(${tile.q}, ${tile.r})`;
-            tooltip.style.whiteSpace = 'pre';
-            tooltip.textContent = text;
-        } else {
-            tooltip.style.display = 'none';
+    if (!unit.isCivilian) {
+        // Fortify
+        addBtn(unit.fortified ? 'Fortified' : 'Fortify', () => {
+            unit.fortified  = true;
+            unit.fortifyBonus = Math.min(0.5, unit.fortifyBonus + 0.25);
+            unit.movesLeft  = 0;
+            deselect();
+            renderer.draw();
+            updateSidebar();
+        }, '', !hasMoves || unit.fortified);
+
+        // Heal / skip
+        addBtn(unit.healing ? 'Healing' : 'Heal', () => {
+            unit.healing   = true;
+            unit.movesLeft = 0;
+            deselect();
+            renderer.draw();
+            updateSidebar();
+        }, '', !hasMoves || unit.healing);
+
+        // Upgrade
+        const upgPath = UNIT_UPGRADES[unit.unitType];
+        if (upgPath) {
+            const [toType, gCost] = upgPath;
+            const tdef    = UNIT_DEFS[toType];
+            const techOk  = !tdef.requires_tech || civ.techsResearched.has(tdef.requires_tech);
+            const resOk   = !tdef.requires_resource ||
+                [...game.tiles.values()].some(t => t.resource === tdef.requires_resource && t.owner === unit.owner);
+            const canUpg  = hasMoves && techOk && resOk && civ.gold >= gCost;
+            addBtn(`Upgrade (${gCost}g)`, () => {
+                const [ok, msg] = game.upgradeUnit(unit);
+                if (ok) { selectUnit(unit); renderer.draw(); }
+                showMessage(msg);
+                updateSidebar();
+            }, '', !canUpg);
         }
-    });
+    }
 
-    canvas.addEventListener('mouseleave', () => {
-        tooltip.style.display = 'none';
-    });
+    // Settler: found city
+    if (unit.unitType === 'settler') {
+        const [canFound, why] = game.canFoundCity(unit);
+        addBtn('Found City', () => {
+            const [ok] = game.canFoundCity(unit);
+            if (ok) {
+                game.foundCity(unit);
+                deselect();
+                renderer.draw();
+                updateSidebar();
+            }
+        }, 'primary', !hasMoves || !canFound);
+    }
+
+    // Worker: build improvements
+    if (unit.unitType === 'worker' && hasMoves) {
+        const tile = game.tiles.get(`${unit.q},${unit.r}`);
+        for (const [key, imp] of Object.entries(IMPROVEMENT_DEFS)) {
+            if (!imp.valid_terrain.includes(tile?.terrain)) continue;
+            const needsTech = imp.requires_tech && !civ.techsResearched.has(imp.requires_tech);
+            addBtn(`Build ${imp.name}`, () => {
+                game.startImprovement(unit, key);
+                deselect();
+                renderer.draw();
+                updateSidebar();
+            }, '', needsTech);
+        }
+    }
+
+    // Skip (consume moves)
+    addBtn('Skip', () => {
+        unit.movesLeft = 0;
+        deselect();
+        renderer.draw();
+        updateSidebar();
+    }, '', !hasMoves);
+}
+
+// ---- City panel ----
+
+function renderCityPanel(city, civ) {
+    const panel = document.getElementById('city-panel');
+    panel.classList.remove('hidden');
+
+    document.getElementById('city-title').textContent = city.name;
+    document.getElementById('city-pop').textContent   = city.population;
+    document.getElementById('city-hp').textContent    = `${city.hp}/50`;
+    document.getElementById('city-hp-bar').style.width = (city.hp / 50 * 100) + '%';
+
+    const threshold = city.foodGrowthThreshold;
+    document.getElementById('city-food').textContent =
+        `${city.foodStored}/${threshold}`;
+    document.getElementById('city-food-bar').style.width =
+        Math.min(100, city.foodStored / threshold * 100) + '%';
+
+    const yields = computeCityYields(city, game.tiles, civ);
+    document.getElementById('city-yields').textContent =
+        `🌾${yields.food} ⚙️${yields.prod} 💰${yields.gold} 🔬${yields.science}`;
+
+    // Current production
+    const prodInfo = document.getElementById('city-production-info');
+    if (city.productionQueue.length) {
+        const cur  = city.productionQueue[0];
+        const cost = getItemCost(cur);
+        const name = (UNIT_DEFS[cur] ?? BUILDING_DEFS[cur])?.name ?? cur;
+        prodInfo.textContent = `${name}: ${city.productionProgress}/${cost} (${yields.prod}⚙/t)`;
+    } else {
+        prodInfo.textContent = 'Nothing queued';
+    }
+
+    // Production list
+    renderProductionList(city, civ);
+
+    // Buildings
+    const bList = document.getElementById('city-buildings');
+    bList.textContent = city.buildings
+        .map(b => BUILDING_DEFS[b]?.name ?? b).join(', ') || '—';
+}
+
+function renderProductionList(city, civ) {
+    const list = document.getElementById('production-list');
+    list.innerHTML = '';
+
+    const buildable = [];
+
+    // Units
+    for (const [key, defn] of Object.entries(UNIT_DEFS)) {
+        if (defn.requires_tech && !civ.techsResearched.has(defn.requires_tech)) continue;
+        if (defn.requires_resource) {
+            const has = [...game.tiles.values()].some(
+                t => t.resource === defn.requires_resource && t.owner === city.owner);
+            if (!has) continue;
+        }
+        buildable.push({ key, name: defn.name, cost: defn.prod_cost, category: 'unit' });
+    }
+
+    // Buildings
+    for (const [key, defn] of Object.entries(BUILDING_DEFS)) {
+        if (city.buildings.includes(key)) continue;
+        if (defn.requires_tech && !civ.techsResearched.has(defn.requires_tech)) continue;
+        buildable.push({ key, name: defn.name, cost: defn.prod_cost, category: 'building' });
+    }
+
+    buildable.sort((a, b) => a.cost - b.cost);
+
+    for (const item of buildable) {
+        const el = document.createElement('div');
+        el.className = 'prod-item' + (city.productionQueue[0] === item.key ? ' active' : '');
+        el.innerHTML = `<span>${item.name}</span><span class="cost">${item.cost}⚙</span>`;
+        el.addEventListener('click', () => {
+            city.productionQueue = [item.key];
+            city.productionProgress = 0;
+            renderCityPanel(city, civ);
+        });
+        list.appendChild(el);
+    }
+}
+
+// ---- Tech panel ----
+
+function renderTechList(civ) {
+    const list = document.getElementById('tech-list');
+    list.innerHTML = '';
+    const available = availableTechs(civ.techsResearched);
+    if (!available.length) { list.innerHTML = '<div style="font-size:12px;color:#5a6a80">All techs researched.</div>'; return; }
+    for (const key of available) {
+        const tech = TECH_DEFS[key];
+        const el   = document.createElement('div');
+        el.className = 'prod-item' + (civ.currentResearch === key ? ' active' : '');
+        el.innerHTML = `<span>${tech.name}</span><span class="cost">${tech.science_cost}🔬</span>`;
+        el.addEventListener('click', () => {
+            civ.currentResearch = key;
+            updateSidebar();
+            document.getElementById('tech-panel').classList.add('hidden');
+        });
+        list.appendChild(el);
+    }
+}
+
+// ============================================================
+// Messages
+// ============================================================
+
+function showMessage(msg) {
+    if (!msg) return;
+    lastMsg = msg;
+    const panel = document.getElementById('msg-panel');
+    panel.classList.remove('hidden');
+    document.getElementById('msg-text').textContent = msg;
+}
+
+function clearMessages() {
+    document.getElementById('msg-panel').classList.add('hidden');
+    lastMsg = '';
+}
+
+// ============================================================
+// End Turn
+// ============================================================
+
+document.getElementById('end-turn-btn').addEventListener('click', doEndTurn);
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.tagName !== 'INPUT') doEndTurn();
+    if (e.key === 'Escape') {
+        deselect();
+        renderer.draw();
+        updateSidebar();
+    }
+});
+
+function doEndTurn() {
+    clearMessages();
+    deselect();
+
+    // Save civ BEFORE endTurn advances currentPlayer
+    const prevCiv = game.currentCiv();
+    game.endTurn();
+    prevCiv.researchJustCompleted = false;
+
+    // Show messages that were generated during the turn that just ended
+    if (prevCiv.pendingMessages.length) {
+        showMessage(prevCiv.pendingMessages.join('\n'));
+        prevCiv.pendingMessages = [];
+    }
+
+    // Skip CPU turns (placeholder — AI will process these in Prompt 6)
+    while (game.currentCiv().isCpu && !game.winner) {
+        game.endTurn();
+    }
+
+    // Prompt for research if the now-active human civ has nothing queued
+    const civ = game.currentCiv();
+    const hasTechs = availableTechs(civ.techsResearched).length > 0;
+    if (!civ.currentResearch && hasTechs) {
+        document.getElementById('tech-panel').classList.remove('hidden');
+        renderTechList(civ);
+    } else {
+        document.getElementById('tech-panel').classList.add('hidden');
+    }
+
+    renderer.draw();
+    updateSidebar();
+}
 </script>
 </body>
 </html>

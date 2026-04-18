@@ -133,14 +133,7 @@ function generateMap(cols = 32, rows = 24, seed = 42) {
 }
 
 // --- Resource placement — mirrors _place_resources ---
-const RESOURCES = {
-    iron:     { type: 'strategic', valid_terrain: ['hills'],                  yield_bonus: { prod: 1 }, requires_tech: 'mining',            enables_unit: 'swordsman' },
-    horses:   { type: 'strategic', valid_terrain: ['plains', 'grassland'],    yield_bonus: { food: 1 }, requires_tech: 'animal_husbandry',  enables_unit: 'horseman'  },
-    gold:     { type: 'luxury',    valid_terrain: ['plains', 'grassland'],    yield_bonus: { gold: 3 }, requires_tech: null },
-    silver:   { type: 'luxury',    valid_terrain: ['hills'],                  yield_bonus: { gold: 2 }, requires_tech: null },
-    diamonds: { type: 'luxury',    valid_terrain: ['forest', 'hills'],        yield_bonus: { gold: 4 }, requires_tech: null },
-};
-
+// (RESOURCES definition lives in state.js; _placeResources only needs the name strings below)
 function _placeResources(tiles, terrainGrid, cols, rows, rng) {
     const hillsPos    = [], plainsPos = [], grassPos = [], forestPos = [];
 

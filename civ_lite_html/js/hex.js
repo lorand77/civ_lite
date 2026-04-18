@@ -5,27 +5,31 @@
 
 const HEX_SIZE = 48; // center-to-corner in pixels
 
-// --- Axial math ---
+// ============================================================
+// Axial math
+// ============================================================
 
 function axialRound(q, r) {
     const s = -q - r;
     let rq = Math.round(q), rr = Math.round(r), rs = Math.round(s);
     const dq = Math.abs(rq - q), dr = Math.abs(rr - r), ds = Math.abs(rs - s);
-    if (dq > dr && dq > ds)      rq = -rr - rs;
-    else if (dr > ds)            rr = -rq - rs;
+    if (dq > dr && dq > ds)  rq = -rr - rs;
+    else if (dr > ds)        rr = -rq - rs;
     return [rq, rr];
 }
 
 function hexToPixel(q, r, hexSize = HEX_SIZE) {
-    const x = hexSize * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r);
-    const y = hexSize * (3 / 2 * r);
-    return [x, y];
+    return [
+        hexSize * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r),
+        hexSize * (3 / 2 * r),
+    ];
 }
 
 function pixelToHex(px, py, hexSize = HEX_SIZE) {
-    const q = (Math.sqrt(3) / 3 * px - 1 / 3 * py) / hexSize;
-    const r = (2 / 3 * py) / hexSize;
-    return axialRound(q, r);
+    return axialRound(
+        (Math.sqrt(3) / 3 * px - 1 / 3 * py) / hexSize,
+        (2 / 3 * py) / hexSize,
+    );
 }
 
 const HEX_DIRECTIONS = [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
@@ -38,93 +42,97 @@ function hexDistance(q1, r1, q2, r2) {
     return (Math.abs(q1 - q2) + Math.abs(q1 + r1 - q2 - r2) + Math.abs(r1 - r2)) / 2;
 }
 
+function hexesInRange(q, r, radius) {
+    const out = [];
+    for (let dq = -radius; dq <= radius; dq++)
+        for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr++)
+            out.push([q + dq, r + dr]);
+    return out;
+}
+
+function hexLine(q1, r1, q2, r2) {
+    const n = hexDistance(q1, r1, q2, r2);
+    if (n === 0) return [];
+    const out = [];
+    for (let i = 1; i < n; i++) {
+        const t = i / n;
+        out.push(axialRound(q1 + (q2 - q1) * t, r1 + (r2 - r1) * t));
+    }
+    return out;
+}
+
 function hexCorners(cx, cy, hexSize = HEX_SIZE) {
     const corners = [];
     for (let i = 0; i < 6; i++) {
-        const angle = Math.PI / 180 * (60 * i - 30);
-        corners.push([cx + hexSize * Math.cos(angle), cy + hexSize * Math.sin(angle)]);
+        const a = Math.PI / 180 * (60 * i - 30);
+        corners.push([cx + hexSize * Math.cos(a), cy + hexSize * Math.sin(a)]);
     }
     return corners;
 }
 
-// --- Terrain colors (matching Python TERRAIN_COLORS) ---
+// ============================================================
+// Color constants
+// ============================================================
 
 const TERRAIN_COLORS = {
-    grassland: '#6aa84f',
-    plains:    '#b6d7a8',
-    hills:     '#996633',
-    forest:    '#274f13',
-    ocean:     '#1e5ab4',
+    grassland: '#6aa84f', plains: '#b6d7a8', hills: '#996633',
+    forest: '#274f13', ocean: '#1e5ab4',
 };
-
 const TERRAIN_STROKE = {
-    grassland: '#4a8a33',
-    plains:    '#90ba88',
-    hills:     '#7a4f22',
-    forest:    '#1a380d',
-    ocean:     '#163f8a',
+    grassland: '#4a8a33', plains: '#90ba88', hills: '#7a4f22',
+    forest: '#1a380d', ocean: '#163f8a',
 };
-
-// Resource dot colors (matches Python RESOURCE_COLORS)
 const RESOURCE_COLORS = {
-    iron:     '#a0a0a0',
-    horses:   '#c8a064',
-    gold:     '#ffd700',
-    silver:   '#c0c0c0',
-    diamonds: '#b4e6ff',
+    iron: '#a0a0a0', horses: '#c8a064', gold: '#ffd700',
+    silver: '#c0c0c0', diamonds: '#b4e6ff',
 };
+const IMPROVEMENT_LABELS = { farm: 'F', mine: 'M', pasture: 'P' };
 
-// --- Demo map generation (placeholder until mapgen.js) ---
-// Generates a small hex-ring map with pseudo-random terrain.
-
-function makeDemoMap(radius = 12) {
-    const tiles = new Map();
-    const terrains = ['grassland', 'grassland', 'plains', 'plains', 'hills', 'forest', 'ocean'];
-
-    // Simple seeded-ish noise using position
-    function terrainAt(q, r) {
-        const v = Math.sin(q * 1.7 + r * 3.1) * 0.5 + Math.cos(q * 2.3 - r * 1.9) * 0.5;
-        const n = (v + 1) / 2; // 0..1
-        if (n < 0.12) return 'ocean';
-        if (n < 0.30) return 'plains';
-        if (n < 0.50) return 'grassland';
-        if (n < 0.68) return 'hills';
-        if (n < 0.82) return 'forest';
-        return 'grassland';
-    }
-
-    for (let dq = -radius; dq <= radius; dq++) {
-        for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr++) {
-            tiles.set(`${dq},${dr}`, { q: dq, r: dr, terrain: terrainAt(dq, dr) });
-        }
-    }
-    return tiles;
+// Parse "#rrggbb" → "r,g,b" for use in rgba()
+function _rgb(hex) {
+    return [
+        parseInt(hex.slice(1, 3), 16),
+        parseInt(hex.slice(3, 5), 16),
+        parseInt(hex.slice(5, 7), 16),
+    ].join(',');
 }
 
-// --- Renderer ---
+// ============================================================
+// HexRenderer
+// ============================================================
 
 class HexRenderer {
-    constructor(canvas) {
-        this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
+    constructor(canvas, civColors = []) {
+        this.canvas    = canvas;
+        this.ctx       = canvas.getContext('2d');
+        this.civColors = civColors; // array of CSS hex strings by player index
 
-        // Viewport state
         this.offsetX = 0;
         this.offsetY = 0;
-        this.scale = 1.0;
+        this.scale   = 1.0;
 
-        // Pan state
-        this._dragging = false;
-        this._dragStartX = 0;
-        this._dragStartY = 0;
-        this._dragOriginX = 0;
-        this._dragOriginY = 0;
+        // Pan tracking
+        this._dragging    = false;
+        this._dragStartX  = 0; this._dragStartY  = 0;
+        this._dragOriginX = 0; this._dragOriginY = 0;
+        this._mouseDownX  = 0; this._mouseDownY  = 0;
 
         this.tiles = new Map();
+
+        // Overlay state (set via setOverlays)
+        this._reachable  = new Set(); // Set<'q,r'>
+        this._attackable = new Set(); // Set<'q,r'>
+        this._selected   = null;      // 'q,r' | null
+
+        // Callbacks set by caller
+        this.onClick    = null; // (tile | null, MouseEvent) => void
+        this.onHover    = null; // (tile | null, MouseEvent) => void
 
         this._bindEvents();
         this._centerView();
     }
+
+    // ---- Public API ----
 
     loadTiles(tiles) {
         this.tiles = tiles;
@@ -132,97 +140,269 @@ class HexRenderer {
         this.draw();
     }
 
-    _centerView() {
-        // Center the grid (q=0,r=0) in the canvas
-        this.offsetX = this.canvas.width / 2;
-        this.offsetY = this.canvas.height / 2;
+    setOverlays({ reachable = null, attackable = null, selected = null } = {}) {
+        this._reachable  = reachable instanceof Map
+            ? new Set(reachable.keys())
+            : (reachable ?? new Set());
+        this._attackable = attackable ?? new Set();
+        this._selected   = selected ?? null;
     }
 
-    // Convert world hex coords → screen pixel
+    clearOverlays() { this.setOverlays({}); }
+
+    // Returns tile under screen coordinate, or null
+    hexAtScreen(sx, sy) {
+        const [wx, wy] = this._screenToWorld(sx, sy);
+        const [q, r]   = pixelToHex(wx, wy, HEX_SIZE);
+        return this.tiles.get(`${q},${r}`) ?? null;
+    }
+
+    // ---- Coordinate transforms ----
+
     _worldToScreen(wx, wy) {
         return [wx * this.scale + this.offsetX, wy * this.scale + this.offsetY];
     }
-
-    // Convert screen pixel → world pixel
     _screenToWorld(sx, sy) {
         return [(sx - this.offsetX) / this.scale, (sy - this.offsetY) / this.scale];
     }
+    _centerView() {
+        this.offsetX = this.canvas.width  / 2;
+        this.offsetY = this.canvas.height / 2;
+    }
+
+    // ---- Draw ----
 
     draw() {
-        const ctx = this.ctx;
-        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Background
+        const ctx     = this.ctx;
+        const W = this.canvas.width, H = this.canvas.height;
+        ctx.clearRect(0, 0, W, H);
         ctx.fillStyle = '#0a0a1a';
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        ctx.fillRect(0, 0, W, H);
 
-        const hexSize = HEX_SIZE * this.scale;
+        const hs = HEX_SIZE * this.scale; // screen hex size
+        const cull = (sx, sy) =>
+            sx < -hs * 2 || sx > W + hs * 2 || sy < -hs * 2 || sy > H + hs * 2;
 
+        // ---- Pass 1: terrain + territory + highlights + resources + improvements ----
         for (const tile of this.tiles.values()) {
             const [wx, wy] = hexToPixel(tile.q, tile.r, HEX_SIZE);
             const [sx, sy] = this._worldToScreen(wx, wy);
+            if (cull(sx, sy)) continue;
 
-            // Cull tiles fully off-screen
-            if (sx < -hexSize * 2 || sx > this.canvas.width + hexSize * 2) continue;
-            if (sy < -hexSize * 2 || sy > this.canvas.height + hexSize * 2) continue;
+            // Terrain
+            this._fillHex(sx, sy, hs, TERRAIN_COLORS[tile.terrain] ?? '#888');
+            this._strokeHex(sx, sy, hs, TERRAIN_STROKE[tile.terrain] ?? '#555',
+                            Math.max(0.5, hs * 0.03));
 
-            this._drawHex(sx, sy, hexSize, tile);
+            // Territory tint (very light overlay in civ color)
+            if (tile.owner !== null && this.civColors[tile.owner]) {
+                this._fillHex(sx, sy, hs, `rgba(${_rgb(this.civColors[tile.owner])},0.18)`);
+            }
+
+            // Movement / attack highlight
+            const key = `${tile.q},${tile.r}`;
+            if (key === this._selected) {
+                this._strokeHex(sx, sy, hs, 'rgba(255,230,0,0.9)', Math.max(2, hs * 0.06));
+                this._fillHex(sx, sy, hs, 'rgba(255,230,0,0.12)');
+            } else if (this._reachable.has(key)) {
+                this._fillHex(sx, sy, hs, 'rgba(80,200,80,0.30)');
+                this._strokeHex(sx, sy, hs, 'rgba(80,200,80,0.7)', Math.max(1, hs * 0.04));
+            } else if (this._attackable.has(key)) {
+                this._fillHex(sx, sy, hs, 'rgba(220,60,60,0.30)');
+                this._strokeHex(sx, sy, hs, 'rgba(220,60,60,0.7)', Math.max(1, hs * 0.04));
+            }
+
+            // Resource dot (skip if a city/unit covers it)
+            if (tile.resource && !tile.city && !tile.unit && !tile.civilian
+                    && RESOURCE_COLORS[tile.resource]) {
+                this._drawDot(sx, sy - hs * 0.15, Math.max(3, hs * 0.13),
+                              RESOURCE_COLORS[tile.resource]);
+            }
+
+            // Improvement label (bottom of hex)
+            if (tile.improvement && IMPROVEMENT_LABELS[tile.improvement] && hs > 16) {
+                ctx.font      = `bold ${Math.max(8, hs * 0.22)}px sans-serif`;
+                ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(IMPROVEMENT_LABELS[tile.improvement], sx, sy + hs * 0.55);
+            }
+        }
+
+        // ---- Pass 2: cities and units (always on top) ----
+        for (const tile of this.tiles.values()) {
+            const [wx, wy] = hexToPixel(tile.q, tile.r, HEX_SIZE);
+            const [sx, sy] = this._worldToScreen(wx, wy);
+            if (cull(sx, sy)) continue;
+
+            if (tile.city)     this._drawCity(sx, sy, hs, tile.city);
+            if (tile.unit)     this._drawUnit(sx, sy, hs, tile.unit, false);
+            if (tile.civilian) this._drawUnit(sx, sy, hs, tile.civilian, true);
         }
     }
 
-    _drawHex(cx, cy, hexSize, tile) {
+    // ---- Draw helpers ----
+
+    _hexPath(cx, cy, hs) {
+        const c = hexCorners(cx, cy, hs);
         const ctx = this.ctx;
-        const { terrain, resource } = tile;
-        const corners = hexCorners(cx, cy, hexSize);
-
         ctx.beginPath();
-        ctx.moveTo(corners[0][0], corners[0][1]);
-        for (let i = 1; i < 6; i++) ctx.lineTo(corners[i][0], corners[i][1]);
+        ctx.moveTo(c[0][0], c[0][1]);
+        for (let i = 1; i < 6; i++) ctx.lineTo(c[i][0], c[i][1]);
         ctx.closePath();
+    }
 
-        ctx.fillStyle = TERRAIN_COLORS[terrain] ?? '#888';
+    _fillHex(cx, cy, hs, color) {
+        this._hexPath(cx, cy, hs);
+        this.ctx.fillStyle = color;
+        this.ctx.fill();
+    }
+
+    _strokeHex(cx, cy, hs, color, lw) {
+        this._hexPath(cx, cy, hs);
+        this.ctx.strokeStyle = color;
+        this.ctx.lineWidth   = lw;
+        this.ctx.stroke();
+    }
+
+    _drawDot(cx, cy, r, fill) {
+        const ctx = this.ctx;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle   = fill;
         ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+        ctx.lineWidth   = Math.max(0.5, r * 0.25);
+        ctx.stroke();
+    }
 
-        ctx.strokeStyle = TERRAIN_STROKE[terrain] ?? '#555';
-        ctx.lineWidth = Math.max(0.5, hexSize * 0.03);
+    _drawHpBar(ctx, cx, cy, hs, hp, hpMax) {
+        const w  = hs * 0.9, h = Math.max(2, hs * 0.07);
+        const x  = cx - w / 2,  y = cy + hs * 0.52;
+        const pct = hp / hpMax;
+        const color = pct > 0.6 ? '#4c4' : pct > 0.3 ? '#cc4' : '#c44';
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, w * pct, h);
+    }
+
+    _drawCity(cx, cy, hs, city) {
+        const ctx   = this.ctx;
+        const color = this.civColors[city.owner] ?? '#888';
+        const r     = hs * 0.38;
+
+        // Diamond shape
+        ctx.beginPath();
+        ctx.moveTo(cx,     cy - r);
+        ctx.lineTo(cx + r, cy);
+        ctx.lineTo(cx,     cy + r);
+        ctx.lineTo(cx - r, cy);
+        ctx.closePath();
+        ctx.fillStyle   = color;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.lineWidth   = Math.max(1, hs * 0.04);
         ctx.stroke();
 
-        // Resource dot
-        if (resource && RESOURCE_COLORS[resource]) {
-            const dotR = Math.max(3, hexSize * 0.14);
-            ctx.beginPath();
-            ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
-            ctx.fillStyle = RESOURCE_COLORS[resource];
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-            ctx.lineWidth = Math.max(0.5, dotR * 0.25);
-            ctx.stroke();
+        // HP bar (only if damaged) — drawn just below the diamond tip
+        if (city.hp < 50) this._drawHpBar(ctx, cx, cy, hs, city.hp, 50);
+
+        // Label — below the HP bar area so it never overlaps
+        if (hs > 18) {
+            const fs = Math.max(7, hs * 0.2);
+            ctx.font         = `bold ${fs}px sans-serif`;
+            ctx.fillStyle    = '#fff';
+            ctx.textAlign    = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(city.name.length > 8 ? city.name.slice(0, 7) + '…' : city.name,
+                         cx, cy + r + fs * 1.1);
         }
     }
 
-    // --- Events ---
+    _drawUnit(cx, cy, hs, unit, isCivilian) {
+        const ctx   = this.ctx;
+        const color = this.civColors[unit.owner] ?? '#888';
+        const r     = hs * 0.33;
+        const noMoves = unit.movesLeft === 0;
+
+        // Circle
+        ctx.beginPath();
+        ctx.arc(cx, cy - hs * 0.04, r, 0, Math.PI * 2);
+        ctx.fillStyle   = noMoves ? `rgba(${_rgb(color)},0.5)` : color;
+        ctx.fill();
+        ctx.strokeStyle = noMoves ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.6)';
+        ctx.lineWidth   = Math.max(1, hs * 0.04);
+        ctx.stroke();
+
+        // Fortify indicator: inner ring
+        if (unit.fortified) {
+            ctx.beginPath();
+            ctx.arc(cx, cy - hs * 0.04, r * 0.7, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+            ctx.lineWidth   = Math.max(1, hs * 0.03);
+            ctx.stroke();
+        }
+
+        // Unit label
+        if (hs > 14) {
+            const fs = Math.max(6, hs * 0.22);
+            ctx.font         = `bold ${fs}px sans-serif`;
+            ctx.fillStyle    = noMoves ? 'rgba(255,255,255,0.45)' : '#fff';
+            ctx.textAlign    = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(unit.label, cx, cy - hs * 0.04);
+        }
+
+        // HP bar
+        this._drawHpBar(ctx, cx, cy - hs * 0.04 + r, hs * 0.7, unit.hp, unit.hpMax);
+
+        // Build progress indicator (worker building something)
+        if (unit.buildingImprovement && hs > 18) {
+            ctx.font         = `${Math.max(6, hs * 0.18)}px sans-serif`;
+            ctx.fillStyle    = '#ffdd44';
+            ctx.textAlign    = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('⚒', cx + r * 0.7, cy - hs * 0.04 - r * 0.7);
+        }
+    }
+
+    // ---- Events ----
 
     _bindEvents() {
         const canvas = this.canvas;
 
         canvas.addEventListener('mousedown', e => {
             if (e.button !== 0) return;
-            this._dragging = true;
-            this._dragStartX = e.clientX;
-            this._dragStartY = e.clientY;
+            this._mouseDownX  = e.clientX;
+            this._mouseDownY  = e.clientY;
+            this._dragging    = true;
+            this._dragStartX  = e.clientX;
+            this._dragStartY  = e.clientY;
             this._dragOriginX = this.offsetX;
             this._dragOriginY = this.offsetY;
             canvas.style.cursor = 'grabbing';
         });
 
         canvas.addEventListener('mousemove', e => {
-            if (!this._dragging) return;
-            this.offsetX = this._dragOriginX + (e.clientX - this._dragStartX);
-            this.offsetY = this._dragOriginY + (e.clientY - this._dragStartY);
-            this.draw();
+            if (this._dragging) {
+                this.offsetX = this._dragOriginX + (e.clientX - this._dragStartX);
+                this.offsetY = this._dragOriginY + (e.clientY - this._dragStartY);
+                this.draw();
+            }
+            if (this.onHover) {
+                const rect = canvas.getBoundingClientRect();
+                this.onHover(this.hexAtScreen(e.clientX - rect.left, e.clientY - rect.top), e);
+            }
         });
 
-        canvas.addEventListener('mouseup', () => {
+        canvas.addEventListener('mouseup', e => {
+            const dx = e.clientX - this._mouseDownX;
+            const dy = e.clientY - this._mouseDownY;
+            if (Math.hypot(dx, dy) < 5 && this.onClick) {
+                const rect = canvas.getBoundingClientRect();
+                this.onClick(this.hexAtScreen(e.clientX - rect.left, e.clientY - rect.top), e);
+            }
             this._dragging = false;
             canvas.style.cursor = 'grab';
         });
@@ -230,40 +410,19 @@ class HexRenderer {
         canvas.addEventListener('mouseleave', () => {
             this._dragging = false;
             canvas.style.cursor = 'grab';
+            if (this.onHover) this.onHover(null, null);
         });
 
-        // Zoom toward cursor
         canvas.addEventListener('wheel', e => {
             e.preventDefault();
-            const rect = canvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left;
-            const my = e.clientY - rect.top;
-
-            const zoomFactor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-            const newScale = Math.min(3.0, Math.max(0.2, this.scale * zoomFactor));
-
-            // Adjust offset so zoom is centered on cursor position
+            const rect        = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+            const factor      = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+            const newScale    = Math.min(3.0, Math.max(0.2, this.scale * factor));
             this.offsetX = mx - (mx - this.offsetX) * (newScale / this.scale);
             this.offsetY = my - (my - this.offsetY) * (newScale / this.scale);
-            this.scale = newScale;
-
+            this.scale   = newScale;
             this.draw();
         }, { passive: false });
-
-        // Resize canvas to fill window
-        window.addEventListener('resize', () => this._onResize());
-    }
-
-    _onResize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-        this.draw();
-    }
-
-    // Returns the hex tile the screen point (sx, sy) falls on, or null
-    hexAtScreen(sx, sy) {
-        const [wx, wy] = this._screenToWorld(sx, sy);
-        const [q, r] = pixelToHex(wx, wy, HEX_SIZE);
-        return this.tiles.get(`${q},${r}`) ?? null;
     }
 }
