@@ -232,7 +232,7 @@
         <!-- New map controls -->
         <div id="seed-row">
             <label style="font-size:11px;color:#5a6a80">Seed</label>
-            <input id="seed-input" type="number" value="42">
+            <input id="seed-input" type="number" value="0">
             <button id="new-map-btn">New Game</button>
         </div>
     </div>
@@ -346,8 +346,10 @@ function initGame(seed) {
     renderer.draw();
 }
 
-// Start with seed 42
-initGame(42);
+// Start with a random seed each page load
+const _startSeed = Math.floor(Math.random() * 1_000_000);
+document.getElementById('seed-input').value = _startSeed;
+initGame(_startSeed);
 
 document.getElementById('new-map-btn').addEventListener('click', () => {
     const seed = parseInt(document.getElementById('seed-input').value, 10) || 0;
