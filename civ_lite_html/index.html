@@ -629,7 +629,11 @@ function renderUnitPanel(unit, civ) {
     if (unit.unitType === 'worker' && hasMoves) {
         const tile = game.tiles.get(`${unit.q},${unit.r}`);
         for (const [key, imp] of Object.entries(IMPROVEMENT_DEFS)) {
-            if (!imp.valid_terrain.includes(tile?.terrain)) continue;
+            const terrainOk = imp.valid_terrain.includes(tile?.terrain);
+            const goldMineOk = key === 'mine' && tile?.resource === 'gold'
+                && (tile.terrain === 'grassland' || tile.terrain === 'plains');
+            if (!terrainOk && !goldMineOk) continue;
+            if (key === 'pasture' && tile?.resource !== 'horses') continue;
             const needsTech = imp.requires_tech && !civ.techsResearched.has(imp.requires_tech);
             addBtn(`Build ${imp.name}`, () => {
                 game.startImprovement(unit, key);

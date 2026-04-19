@@ -519,6 +519,7 @@ class Game {
         const goldMineOk  = improvementKey === 'mine' && tile.resource === 'gold'
                             && (tile.terrain === 'grassland' || tile.terrain === 'plains');
         if (!terrainOk && !goldMineOk) return false;
+        if (improvementKey === 'pasture' && tile.resource !== 'horses') return false;
         const civ = this.civs[unit.owner];
         if (defn.requires_tech && !civ.techsResearched.has(defn.requires_tech)) return false;
         unit.buildingImprovement = improvementKey;
