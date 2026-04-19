@@ -198,11 +198,32 @@
 
         /* Scrollable list inside panel */
         .scroll-list { max-height: 180px; overflow-y: auto; }
+
+        /* Tech tree overlay */
+        #tech-overlay {
+            position: fixed; inset: 0; z-index: 200;
+            background: rgba(5,8,20,0.96);
+            display: flex; align-items: center; justify-content: center;
+            flex-direction: column;
+        }
+        #tech-overlay.hidden { display: none; }
+        #tech-overlay-inner { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+        #tech-overlay-title { color: #e8d48b; font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+        #tech-overlay-hint { color: #5a6a80; font-size: 12px; }
+        #tech-tree-canvas { border: 1px solid #2a3040; border-radius: 4px; cursor: pointer; }
     </style>
 </head>
 <body>
 
 <canvas id="game-canvas"></canvas>
+
+<div id="tech-overlay" class="hidden">
+    <div id="tech-overlay-inner">
+        <div id="tech-overlay-title">Technology Tree</div>
+        <canvas id="tech-tree-canvas"></canvas>
+        <div id="tech-overlay-hint">Click an available tech to research it · T or Escape to close</div>
+    </div>
+</div>
 
 <!-- ============================================================ -->
 <!-- Sidebar                                                       -->
@@ -276,12 +297,6 @@
         </div>
     </div>
 
-    <!-- Tech panel (when no unit/city selected) -->
-    <div class="panel hidden" id="tech-panel">
-        <div class="panel-title">Research</div>
-        <div class="scroll-list" id="tech-list"></div>
-    </div>
-
     <!-- Messages -->
     <div class="panel hidden" id="msg-panel">
         <div class="section-label">Event</div>
@@ -313,6 +328,28 @@
 // ============================================================
 
 const SIDEBAR_W = 272;
+
+// Tech tree layout constants
+const TECH_POSITIONS = {
+    mining:           { x:10,  y:30  },
+    animal_husbandry: { x:10,  y:100 },
+    archery:          { x:10,  y:170 },
+    pottery:          { x:10,  y:240 },
+    bronze_working:   { x:200, y:30  },
+    horseback_riding: { x:200, y:100 },
+    writing:          { x:200, y:200 },
+    iron_working:     { x:390, y:30  },
+    mathematics:      { x:390, y:130 },
+    currency:         { x:390, y:210 },
+    theology:         { x:390, y:280 },
+    feudalism:        { x:580, y:30  },
+    steel:            { x:580, y:100 },
+    machinery:        { x:580, y:170 },
+    education:        { x:580, y:250 },
+    civil_service:    { x:580, y:320 },
+};
+const CARD_W = 160, CARD_H = 52;
+const TREE_W = 760, TREE_H = 410;
 
 const canvas  = document.getElementById('game-canvas');
 canvas.width  = window.innerWidth - SIDEBAR_W;
@@ -380,7 +417,7 @@ function selectUnit(unit) {
         attackable: sel.attackable,
         selected:   `${unit.q},${unit.r}`,
     });
-    document.getElementById('tech-panel').classList.add('hidden');
+    closeTechTree();
 }
 
 function selectCity(city) {
@@ -389,7 +426,7 @@ function selectCity(city) {
     sel.reachable = new Map();
     sel.attackable= new Set();
     renderer.setOverlays({ selected: `${city.q},${city.r}` });
-    document.getElementById('tech-panel').classList.add('hidden');
+    closeTechTree();
 }
 
 function deselect() {
@@ -400,13 +437,11 @@ function deselect() {
     renderer.clearOverlays();
     document.getElementById('unit-panel').classList.add('hidden');
     document.getElementById('city-panel').classList.add('hidden');
-    // Show tech panel if civ has no current research
+    closeTechTree();
+    // Open tech tree if civ has no current research
     const civ = game.currentCiv();
-    if (!civ.currentResearch) {
-        document.getElementById('tech-panel').classList.remove('hidden');
-        renderTechList(civ);
-    } else {
-        document.getElementById('tech-panel').classList.add('hidden');
+    if (!civ.currentResearch && availableTechs(civ.techsResearched).length > 0) {
+        openTechTree();
     }
 }
 
@@ -733,26 +768,152 @@ function renderProductionList(city, civ) {
     }
 }
 
-// ---- Tech panel ----
+// ---- Tech Tree Overlay ----
 
-function renderTechList(civ) {
-    const list = document.getElementById('tech-list');
-    list.innerHTML = '';
-    const available = availableTechs(civ.techsResearched);
-    if (!available.length) { list.innerHTML = '<div style="font-size:12px;color:#5a6a80">All techs researched.</div>'; return; }
-    for (const key of available) {
-        const tech = TECH_DEFS[key];
-        const el   = document.createElement('div');
-        el.className = 'prod-item' + (civ.currentResearch === key ? ' active' : '');
-        el.innerHTML = `<span>${tech.name}</span><span class="cost">${tech.science_cost}🔬</span>`;
-        el.addEventListener('click', () => {
-            civ.currentResearch = key;
-            updateSidebar();
-            document.getElementById('tech-panel').classList.add('hidden');
-        });
-        list.appendChild(el);
-    }
+function openTechTree() {
+    const overlay = document.getElementById('tech-overlay');
+    overlay.classList.remove('hidden');
+    const tc = document.getElementById('tech-tree-canvas');
+    const maxW = Math.min(window.innerWidth - 40, TREE_W * 2);
+    const scale = Math.min(1.6, maxW / TREE_W);
+    tc.width  = Math.round(TREE_W  * scale);
+    tc.height = Math.round(TREE_H  * scale);
+    tc._treeScale = scale;
+    drawTechTree(tc, game.currentCiv());
 }
+
+function closeTechTree() {
+    document.getElementById('tech-overlay').classList.add('hidden');
+}
+
+function drawTechTree(tc, civ) {
+    const scale = tc._treeScale ?? 1;
+    const ctx = tc.getContext('2d');
+    ctx.clearRect(0, 0, tc.width, tc.height);
+    ctx.fillStyle = '#080c18';
+    ctx.fillRect(0, 0, tc.width, tc.height);
+    ctx.save();
+    ctx.scale(scale, scale);
+
+    // Draw arrows behind cards
+    for (const [key, defn] of Object.entries(TECH_DEFS)) {
+        const toPos = TECH_POSITIONS[key];
+        if (!toPos) continue;
+        for (const preKey of defn.prerequisites) {
+            const fromPos = TECH_POSITIONS[preKey];
+            if (!fromPos) continue;
+            const bothDone = civ.techsResearched.has(key) && civ.techsResearched.has(preKey);
+            const preDone  = civ.techsResearched.has(preKey);
+            const color = bothDone ? '#4ab44a' : preDone ? '#6060c0' : '#303038';
+            _drawArrow(ctx,
+                fromPos.x + CARD_W, fromPos.y + CARD_H / 2,
+                toPos.x,            toPos.y   + CARD_H / 2,
+                color);
+        }
+    }
+
+    // Draw cards
+    for (const [key, defn] of Object.entries(TECH_DEFS)) {
+        const pos = TECH_POSITIONS[key];
+        if (!pos) continue;
+        const researched = civ.techsResearched.has(key);
+        const isCurrent  = civ.currentResearch === key;
+        const prereqsMet = defn.prerequisites.every(p => civ.techsResearched.has(p));
+        const available  = !researched && prereqsMet;
+
+        let bg, border, textColor;
+        if (researched)     { bg='#1a3a1a'; border='#4ab44a'; textColor='#90e090'; }
+        else if (isCurrent) { bg='#1a1a3a'; border='#8080d8'; textColor='#b0b0ff'; }
+        else if (available) { bg='#1e1e32'; border='#6060a0'; textColor='#cccccc'; }
+        else                { bg='#111118'; border='#303038'; textColor='#555555'; }
+
+        ctx.fillStyle = bg;
+        ctx.strokeStyle = border;
+        ctx.lineWidth = 1.5;
+        _roundRect(ctx, pos.x, pos.y, CARD_W, CARD_H, 4);
+        ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = textColor;
+        ctx.font = `bold 11px sans-serif`;
+        ctx.textBaseline = 'top';
+        ctx.fillText(defn.name, pos.x + 6, pos.y + 6);
+
+        ctx.font = `10px sans-serif`;
+        ctx.fillStyle = researched ? '#4ab44a' : isCurrent ? '#8080d8' : '#888';
+        let costStr;
+        if (researched) costStr = 'Done';
+        else if (isCurrent) costStr = `${civ.science} / ${defn.science_cost} sci`;
+        else costStr = `${defn.science_cost} sci`;
+        ctx.fillText(costStr, pos.x + 6, pos.y + 20);
+
+        const unlocks = [
+            ...defn.unlocks_units.map(u => UNIT_DEFS[u]?.name ?? u),
+            ...defn.unlocks_buildings.map(b => BUILDING_DEFS[b]?.name ?? b),
+            ...(defn.unlocks_improvements ?? []),
+            ...(defn.reveals_resources ?? []),
+        ].join(', ');
+        if (unlocks) {
+            ctx.font = `9px sans-serif`;
+            ctx.fillStyle = researched ? '#3a7a3a' : '#4a5a70';
+            const maxPx = CARD_W - 12;
+            let text = unlocks;
+            while (ctx.measureText(text).width > maxPx && text.length > 0)
+                text = text.slice(0, -1);
+            if (text !== unlocks) text += '…';
+            ctx.fillText(text, pos.x + 6, pos.y + 34);
+        }
+    }
+
+    ctx.restore();
+}
+
+function _drawArrow(ctx, x1, y1, x2, y2, color) {
+    ctx.strokeStyle = color;
+    ctx.fillStyle   = color;
+    ctx.lineWidth   = 1.5;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+    const size  = 6;
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - size * Math.cos(angle - 0.4), y2 - size * Math.sin(angle - 0.4));
+    ctx.lineTo(x2 - size * Math.cos(angle + 0.4), y2 - size * Math.sin(angle + 0.4));
+    ctx.closePath(); ctx.fill();
+}
+
+function _roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y); ctx.arcTo(x+w, y, x+w, y+r, r);
+    ctx.lineTo(x+w, y+h-r);  ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
+    ctx.lineTo(x+r, y+h);    ctx.arcTo(x, y+h, x, y+h-r, r);
+    ctx.lineTo(x, y+r);      ctx.arcTo(x, y, x+r, y, r);
+    ctx.closePath();
+}
+
+document.getElementById('tech-tree-canvas').addEventListener('click', e => {
+    const tc    = e.currentTarget;
+    const scale = tc._treeScale ?? 1;
+    const rect  = tc.getBoundingClientRect();
+    const mx    = (e.clientX - rect.left) / scale;
+    const my    = (e.clientY - rect.top)  / scale;
+    const civ   = game.currentCiv();
+
+    for (const [key, pos] of Object.entries(TECH_POSITIONS)) {
+        if (mx >= pos.x && mx <= pos.x + CARD_W && my >= pos.y && my <= pos.y + CARD_H) {
+            const defn = TECH_DEFS[key];
+            const prereqsMet = defn.prerequisites.every(p => civ.techsResearched.has(p));
+            if (!civ.techsResearched.has(key) && prereqsMet) {
+                civ.currentResearch = key;
+                closeTechTree();
+                updateSidebar();
+            } else {
+                drawTechTree(tc, civ);
+            }
+            break;
+        }
+    }
+});
 
 // ============================================================
 // Messages
@@ -778,11 +939,83 @@ function clearMessages() {
 document.getElementById('end-turn-btn').addEventListener('click', doEndTurn);
 
 document.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && e.target.tagName !== 'INPUT') doEndTurn();
-    if (e.key === 'Escape') {
-        deselect();
-        renderer.draw();
-        updateSidebar();
+    if (e.target.tagName === 'INPUT') return;
+
+    const unit = sel.unit;
+
+    switch (e.key) {
+        case 'Enter':
+            doEndTurn();
+            break;
+
+        case 'Escape':
+            closeTechTree();
+            deselect(); renderer.draw(); updateSidebar();
+            break;
+
+        case 't': case 'T': {
+            const _overlay = document.getElementById('tech-overlay');
+            if (_overlay.classList.contains('hidden')) openTechTree();
+            else closeTechTree();
+            break;
+        }
+
+        // Settler
+        case 'f': case 'F':
+            if (unit?.unitType === 'settler') {
+                const [ok, msg] = game.canFoundCity(unit);
+                if (ok) { game.foundCity(unit); deselect(); renderer.draw(); updateSidebar(); }
+                else showMessage(msg);
+            }
+            break;
+
+        // Worker
+        case 'm': case 'M':
+            if (unit?.unitType === 'worker') {
+                game.startImprovement(unit, 'mine');
+                deselect(); renderer.draw(); updateSidebar();
+            }
+            break;
+        case 'a': case 'A':
+            if (unit?.unitType === 'worker') {
+                game.startImprovement(unit, 'farm');
+                deselect(); renderer.draw(); updateSidebar();
+            }
+            break;
+        case 'p': case 'P':
+            if (unit?.unitType === 'worker') {
+                game.startImprovement(unit, 'pasture');
+                deselect(); renderer.draw(); updateSidebar();
+            }
+            break;
+
+        // Military
+        case 'k': case 'K':
+            if (unit && !unit.isCivilian && unit.movesLeft > 0) {
+                unit.fortified = true; unit.movesLeft = 0;
+                deselect(); renderer.draw(); updateSidebar();
+            }
+            break;
+        case 'h': case 'H':
+            if (unit && !unit.isCivilian && unit.movesLeft > 0) {
+                unit.healing = true; unit.movesLeft = 0;
+                deselect(); renderer.draw(); updateSidebar();
+            }
+            break;
+        case 'u': case 'U':
+            if (unit && !unit.isCivilian) {
+                const [ok, msg] = game.upgradeUnit(unit);
+                if (ok) { selectUnit(unit); renderer.draw(); }
+                showMessage(msg);
+                updateSidebar();
+            }
+            break;
+
+        // Arrow key pan
+        case 'ArrowLeft':  renderer.offsetX += 40; renderer.draw(); e.preventDefault(); break;
+        case 'ArrowRight': renderer.offsetX -= 40; renderer.draw(); e.preventDefault(); break;
+        case 'ArrowUp':    renderer.offsetY += 40; renderer.draw(); e.preventDefault(); break;
+        case 'ArrowDown':  renderer.offsetY -= 40; renderer.draw(); e.preventDefault(); break;
     }
 });
 
@@ -812,10 +1045,9 @@ function doEndTurn() {
     const civ = game.currentCiv();
     const hasTechs = availableTechs(civ.techsResearched).length > 0;
     if (!civ.currentResearch && hasTechs) {
-        document.getElementById('tech-panel').classList.remove('hidden');
-        renderTechList(civ);
+        openTechTree();
     } else {
-        document.getElementById('tech-panel').classList.add('hidden');
+        closeTechTree();
     }
 
     renderer.draw();
