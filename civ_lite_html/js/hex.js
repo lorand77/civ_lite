@@ -128,8 +128,35 @@ class HexRenderer {
         this.onClick    = null; // (tile | null, MouseEvent) => void
         this.onHover    = null; // (tile | null, MouseEvent) => void
 
+        // Terrain / resource images
+        this._terrainImgs  = {};
+        this._resourceImgs = {};
+        this._imgsReady    = false;
+        this._loadImages();
+
         this._bindEvents();
         this._centerView();
+    }
+
+    // ---- Image loading ----
+
+    _loadImages() {
+        const terrains = ['grassland', 'plains', 'hills', 'forest', 'ocean'];
+        const resMap   = { iron: 'Iron', horses: 'Horses', gold: 'Gold', silver: 'Silver', diamonds: 'Diamonds' };
+        let pending = terrains.length + Object.keys(resMap).length;
+        const done = () => { if (--pending === 0) { this._imgsReady = true; this.draw(); } };
+        for (const t of terrains) {
+            const img = new Image();
+            img.onload = img.onerror = done;
+            img.src = `assets/terrain-${t}.png`;
+            this._terrainImgs[t] = img;
+        }
+        for (const [r, fname] of Object.entries(resMap)) {
+            const img = new Image();
+            img.onload = img.onerror = done;
+            img.src = `assets/resource-${fname}.png`;
+            this._resourceImgs[r] = img;
+        }
     }
 
     // ---- Public API ----
@@ -189,15 +216,15 @@ class HexRenderer {
             const [sx, sy] = this._worldToScreen(wx, wy);
             if (cull(sx, sy)) continue;
 
-            // Terrain
-            this._fillHex(sx, sy, hs, TERRAIN_COLORS[tile.terrain] ?? '#888');
-            this._strokeHex(sx, sy, hs, TERRAIN_STROKE[tile.terrain] ?? '#555',
-                            Math.max(0.5, hs * 0.03));
-
-            // Territory tint (very light overlay in civ color)
-            if (tile.owner !== null && this.civColors[tile.owner]) {
-                this._fillHex(sx, sy, hs, `rgba(${_rgb(this.civColors[tile.owner])},0.18)`);
+            // Terrain — image if loaded, fallback to solid color
+            const tImg = this._terrainImgs[tile.terrain];
+            if (tImg && tImg.complete && tImg.naturalWidth > 0) {
+                this._fillHexImage(sx, sy, hs, tImg);
+            } else {
+                this._fillHex(sx, sy, hs, TERRAIN_COLORS[tile.terrain] ?? '#888');
             }
+            // Thin separator stroke between tiles
+            this._strokeHex(sx, sy, hs, 'rgba(0,0,0,0.22)', Math.max(0.5, hs * 0.02));
 
             // Movement / attack highlight
             const key = `${tile.q},${tile.r}`;
@@ -212,11 +239,16 @@ class HexRenderer {
                 this._strokeHex(sx, sy, hs, 'rgba(220,60,60,0.7)', Math.max(1, hs * 0.04));
             }
 
-            // Resource dot (skip if a city/unit covers it)
-            if (tile.resource && !tile.city && !tile.unit && !tile.civilian
-                    && RESOURCE_COLORS[tile.resource]) {
-                this._drawDot(sx, sy - hs * 0.15, Math.max(3, hs * 0.13),
-                              RESOURCE_COLORS[tile.resource]);
+            // Resource icon (skip if a city/unit covers it)
+            if (tile.resource && !tile.city) {
+                const rImg = this._resourceImgs[tile.resource];
+                if (rImg && rImg.complete && rImg.naturalWidth > 0) {
+                    const size = Math.max(8, hs * 0.35);
+                    this.ctx.drawImage(rImg, sx + hs * 0.38 - size / 2, sy - hs * 0.42 - size / 2, size, size);
+                } else if (RESOURCE_COLORS[tile.resource]) {
+                    this._drawDot(sx, sy - hs * 0.15, Math.max(3, hs * 0.13),
+                                  RESOURCE_COLORS[tile.resource]);
+                }
             }
 
             // Improvement label (bottom of hex)
@@ -228,6 +260,9 @@ class HexRenderer {
                 ctx.fillText(IMPROVEMENT_LABELS[tile.improvement], sx, sy + hs * 0.55);
             }
         }
+
+        // ---- Pass 1.5: territory border lines in civ color ----
+        this._drawTerritoryBorders(hs);
 
         // ---- Pass 2: cities and units (always on top) ----
         for (const tile of this.tiles.values()) {
@@ -263,6 +298,52 @@ class HexRenderer {
         this.ctx.strokeStyle = color;
         this.ctx.lineWidth   = lw;
         this.ctx.stroke();
+    }
+
+    _fillHexImage(cx, cy, hs, img) {
+        const ctx = this.ctx;
+        ctx.save();
+        this._hexPath(cx, cy, hs);
+        ctx.clip();
+        const size = hs * 2.05;
+        ctx.drawImage(img, cx - size / 2, cy - size / 2, size, size);
+        ctx.restore();
+    }
+
+    _drawTerritoryBorders(hs) {
+        // Edge i (corner i → corner i+1) is shared with the neighbor in this direction index:
+        const EDGE_DIR = [0, 5, 4, 3, 2, 1];
+
+        const ctx = this.ctx;
+        const lw  = Math.max(2, hs * 0.07);
+        ctx.lineCap = 'round';
+
+        for (const tile of this.tiles.values()) {
+            if (tile.owner === null) continue;
+            const color = this.civColors[tile.owner];
+            if (!color) continue;
+
+            const [wx, wy] = hexToPixel(tile.q, tile.r, HEX_SIZE);
+            const [sx, sy] = this._worldToScreen(wx, wy);
+            if (sx < -hs * 3 || sx > this.canvas.width  + hs * 3 ||
+                sy < -hs * 3 || sy > this.canvas.height + hs * 3) continue;
+
+            const corners = hexCorners(sx, sy, hs);
+            ctx.strokeStyle = color;
+            ctx.lineWidth   = lw;
+
+            for (let i = 0; i < 6; i++) {
+                const [dq, dr] = HEX_DIRECTIONS[EDGE_DIR[i]];
+                const nb = this.tiles.get(`${tile.q + dq},${tile.r + dr}`);
+                if (nb && nb.owner === tile.owner) continue; // same civ — no border
+                const c0 = corners[i];
+                const c1 = corners[(i + 1) % 6];
+                ctx.beginPath();
+                ctx.moveTo(c0[0], c0[1]);
+                ctx.lineTo(c1[0], c1[1]);
+                ctx.stroke();
+            }
+        }
     }
 
     _drawDot(cx, cy, r, fill) {
