@@ -322,6 +322,7 @@
 <script src="js/mapgen.js"></script>
 <script src="js/state.js"></script>
 <script src="js/game.js"></script>
+<script src="js/ai.js"></script>
 <script>
 // ============================================================
 // Bootstrap
@@ -1034,8 +1035,10 @@ function doEndTurn() {
         prevCiv.pendingMessages = [];
     }
 
-    // Skip CPU turns (placeholder — AI will process these in Prompt 6)
+    // Run CPU turns
     while (game.currentCiv().isCpu && !game.winner) {
+        const cpuCiv = game.currentCiv();
+        aiTakeTurn(game, cpuCiv);
         game.endTurn();
     }
 
