@@ -341,6 +341,7 @@ function initGame(seed) {
         _rendererReady = true;
     }
     renderer.loadTiles(game.tiles);
+    renderer.knownTechs = game.currentCiv().techsResearched;
     deselect();
     updateSidebar();
     renderer.draw();
@@ -800,6 +801,8 @@ function doEndTurn() {
     while (game.currentCiv().isCpu && !game.winner) {
         game.endTurn();
     }
+
+    renderer.knownTechs = game.currentCiv().techsResearched;
 
     // Prompt for research if the now-active human civ has nothing queued
     const civ = game.currentCiv();

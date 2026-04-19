@@ -134,6 +134,9 @@ class HexRenderer {
         this._imgsReady    = false;
         this._loadImages();
 
+        // Set of tech keys the current player has researched (null = show all)
+        this.knownTechs = null;
+
         this._bindEvents();
         this._centerView();
     }
@@ -239,8 +242,11 @@ class HexRenderer {
                 this._strokeHex(sx, sy, hs, 'rgba(220,60,60,0.7)', Math.max(1, hs * 0.04));
             }
 
-            // Resource icon (skip if a city/unit covers it)
-            if (tile.resource && !tile.city) {
+            // Resource icon (skip if a city covers it, or tech not yet researched)
+            const _resReq = tile.resource && RESOURCES[tile.resource]?.requires_tech;
+            const _resVisible = tile.resource && !tile.city &&
+                (!_resReq || !this.knownTechs || this.knownTechs.has(_resReq));
+            if (_resVisible) {
                 const rImg = this._resourceImgs[tile.resource];
                 if (rImg && rImg.complete && rImg.naturalWidth > 0) {
                     const size = Math.max(8, hs * 0.35);
