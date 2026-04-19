@@ -695,12 +695,15 @@ class Game {
         let best = null, bestScore = -Infinity;
         for (const key of candidates) {
             const t = this.tiles.get(key);
+            const [tq, tr] = key.split(',').map(Number);
             const y = TERRAIN_YIELDS[t.terrain];
-            let score = y.food + y.prod + y.gold;
+            let yieldScore = y.food + y.prod + y.gold;
             if (t.resource) {
                 const b = RESOURCES[t.resource].yield_bonus;
-                score += (b.food ?? 0) + (b.prod ?? 0) + (b.gold ?? 0);
+                yieldScore += (b.food ?? 0) + (b.prod ?? 0) + (b.gold ?? 0);
             }
+            const minDist = Math.min(...civ.cities.map(c => hexDistance(tq, tr, c.q, c.r)));
+            const score = yieldScore / Math.max(1, minDist);
             if (score > bestScore) { bestScore = score; best = key; }
         }
         if (best) this.tiles.get(best).owner = civ.playerIndex;
