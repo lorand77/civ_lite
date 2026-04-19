@@ -461,7 +461,7 @@ class Game {
             city.buildings.push('palace');
         }
 
-        autoAssignWorkedTiles(city, this.tiles);
+        autoAssignWorkedTiles(city, this.tiles, civ);
         return city;
     }
 
@@ -748,7 +748,7 @@ class Game {
             if (city.foodStored >= city.foodGrowthThreshold) {
                 city.population++;
                 city.foodStored = 0;
-                autoAssignWorkedTiles(city, this.tiles);
+                autoAssignWorkedTiles(city, this.tiles, civ);
             }
 
             civ.gold    += yields.gold;
@@ -791,6 +791,13 @@ class Game {
                     const tile = this.tiles.get(`${unit.q},${unit.r}`);
                     if (tile) tile.improvement = unit.buildingImprovement;
                     unit.buildingImprovement = null;
+                    // Re-evaluate worked tiles for any city that can reach this tile
+                    if (tile) {
+                        for (const city of civ.cities) {
+                            if (hexDistance(unit.q, unit.r, city.q, city.r) <= 3)
+                                autoAssignWorkedTiles(city, this.tiles, civ);
+                        }
+                    }
                 }
             }
         }

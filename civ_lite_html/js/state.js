@@ -198,7 +198,7 @@ const BUILDING_DEFS = {
     granary:  { name: 'Granary',  prod_cost: 80,  requires_tech: 'pottery',     effects: { food_per_turn: 2 }, maintenance: 1 },
     library:  { name: 'Library',  prod_cost: 100, requires_tech: 'writing',     effects: { science_per_turn: 2 }, maintenance: 1 },
     market:   { name: 'Market',   prod_cost: 100, requires_tech: 'currency',    effects: { gold_per_turn: 2 }, maintenance: 0 },
-    forge:    { name: 'Forge',    prod_cost: 120, requires_tech: 'iron_working', effects: { prod_bonus_hills: 1 }, maintenance: 1 },
+    forge:    { name: 'Forge',    prod_cost: 120, requires_tech: 'iron_working', effects: {}, maintenance: 1 },
     walls:    { name: 'Walls',    prod_cost: 80,  requires_tech: 'mathematics', effects: {}, defense: 4, maintenance: 1 },
     castle:   { name: 'Castle',   prod_cost: 130, requires_tech: 'feudalism',   effects: { gold_per_turn: 1, culture_per_turn: 3 }, defense: 6, maintenance: 2 },
     cathedral:{ name: 'Cathedral',prod_cost: 120, requires_tech: 'theology',    effects: { culture_per_turn: 4, food_per_turn: 1 }, maintenance: 2 },
@@ -444,11 +444,12 @@ function getAttackableTiles(unit, tiles) {
 // Port of auto_assign_worked_tiles from city.py
 // ============================================================
 
-function autoAssignWorkedTiles(city, tiles) {
+function autoAssignWorkedTiles(city, tiles, civ = null) {
     city.workedTiles = [[city.q, city.r]];
     const candidates = [];
 
-    for (const [nq, nr] of hexNeighbors(city.q, city.r)) {
+    for (const [nq, nr] of hexesInRange(city.q, city.r, 3)) {
+        if (nq === city.q && nr === city.r) continue; // city center already included
         const tile = tiles.get(`${nq},${nr}`);
         if (!tile || tile.terrain === 'ocean') continue;
 
@@ -456,8 +457,12 @@ function autoAssignWorkedTiles(city, tiles) {
         let score = y.food * 1.1 + y.prod + y.gold;
 
         if (tile.resource && RESOURCES[tile.resource]) {
-            const b = RESOURCES[tile.resource].yield_bonus;
-            score += (b.food ?? 0) * 1.1 + (b.prod ?? 0) + (b.gold ?? 0);
+            const res = RESOURCES[tile.resource];
+            const techOk = !res.requires_tech || !civ || civ.techsResearched.has(res.requires_tech);
+            if (techOk) {
+                const b = res.yield_bonus;
+                score += (b.food ?? 0) * 1.1 + (b.prod ?? 0) + (b.gold ?? 0);
+            }
         }
         if (tile.improvement && IMPROVEMENT_DEFS[tile.improvement]) {
             const b = IMPROVEMENT_DEFS[tile.improvement].yield_bonus;
