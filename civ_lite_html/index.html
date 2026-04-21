@@ -620,14 +620,15 @@ function renderUnitPanel(unit, civ) {
             updateSidebar();
         }, '', !hasMoves || unit.fortified);
 
-        // Heal / skip
+        // Heal / skip — requires full movement (unit must not have moved this turn)
+        const canHeal = unit.movesLeft === defn.moves && !unit.healing;
         addBtn(unit.healing ? 'Healing' : 'Heal', () => {
             unit.healing   = true;
             unit.movesLeft = 0;
             deselect();
             renderer.draw();
             updateSidebar();
-        }, '', !hasMoves || unit.healing);
+        }, '', !canHeal);
 
         // Upgrade
         const upgPath = UNIT_UPGRADES[unit.unitType];
@@ -749,6 +750,7 @@ function renderProductionList(city, civ) {
 
     // Buildings
     for (const [key, defn] of Object.entries(BUILDING_DEFS)) {
+        if (key === 'palace') continue;
         if (city.buildings.includes(key)) continue;
         if (defn.requires_tech && !civ.techsResearched.has(defn.requires_tech)) continue;
         buildable.push({ key, name: defn.name, cost: defn.prod_cost, category: 'building' });
@@ -998,7 +1000,7 @@ document.addEventListener('keydown', e => {
             }
             break;
         case 'h': case 'H':
-            if (unit && !unit.isCivilian && unit.movesLeft > 0) {
+            if (unit && !unit.isCivilian && unit.movesLeft === UNIT_DEFS[unit.unitType].moves) {
                 unit.healing = true; unit.movesLeft = 0;
                 deselect(); renderer.draw(); updateSidebar();
             }

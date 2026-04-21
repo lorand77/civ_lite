@@ -700,8 +700,12 @@ class Game {
             const y = TERRAIN_YIELDS[t.terrain];
             let yieldScore = y.food + y.prod + y.gold;
             if (t.resource) {
-                const b = RESOURCES[t.resource].yield_bonus;
-                yieldScore += (b.food ?? 0) + (b.prod ?? 0) + (b.gold ?? 0);
+                const res = RESOURCES[t.resource];
+                const req = res.requires_tech;
+                if (!req || civ.techsResearched.has(req)) {
+                    const b = res.yield_bonus;
+                    yieldScore += (b.food ?? 0) + (b.prod ?? 0) + (b.gold ?? 0);
+                }
             }
             const minDist = Math.min(...civ.cities.map(c => hexDistance(tq, tr, c.q, c.r)));
             const score = yieldScore / Math.max(1, minDist);
@@ -781,6 +785,9 @@ class Game {
                 civ.currentResearch = null;
                 civ.pendingMessages.push(`${techName} researched!`);
                 civ.researchJustCompleted = true;
+                // Refresh worked tiles now that new resource bonuses may be revealed
+                for (const city of civ.cities)
+                    autoAssignWorkedTiles(city, this.tiles, civ);
             }
         }
 

@@ -452,6 +452,7 @@ function autoAssignWorkedTiles(city, tiles, civ = null) {
         if (nq === city.q && nr === city.r) continue; // city center already included
         const tile = tiles.get(`${nq},${nr}`);
         if (!tile || tile.terrain === 'ocean') continue;
+        if (tile.owner !== city.owner) continue;
 
         const y = TERRAIN_YIELDS[tile.terrain];
         let score = y.food * 1.1 + y.prod + y.gold;
