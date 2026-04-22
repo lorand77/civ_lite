@@ -680,7 +680,7 @@ class Game {
 
     // ---- Border expansion ----
 
-    _expandBorder(civ) {
+    _expandBorder(civ, sourceCity) {
         const candidates = new Set();
         for (const [key, tile] of this.tiles) {
             if (tile.owner !== civ.playerIndex) continue;
@@ -707,8 +707,9 @@ class Game {
                     yieldScore += (b.food ?? 0) + (b.prod ?? 0) + (b.gold ?? 0);
                 }
             }
+            const distFromSource = hexDistance(tq, tr, sourceCity.q, sourceCity.r);
             const minDist = Math.min(...civ.cities.map(c => hexDistance(tq, tr, c.q, c.r)));
-            const score = yieldScore / Math.max(1, minDist);
+            const score = yieldScore / (Math.max(1, minDist) * Math.max(1, distFromSource));
             if (score > bestScore) { bestScore = score; best = key; }
         }
         if (best) this.tiles.get(best).owner = civ.playerIndex;
@@ -764,7 +765,7 @@ class Game {
             city.cultureStored     += yields.culture;
             while (city.cultureStored >= 20) {
                 city.cultureStored -= 20;
-                this._expandBorder(civ);
+                this._expandBorder(civ, city);
             }
 
             // City HP regen
