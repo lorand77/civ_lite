@@ -1498,13 +1498,27 @@ function doEndTurn() {
         prevCiv.pendingMessages = [];
     }
 
-    // Run CPU turns
-    while (game.currentCiv().isCpu && !game.winner) {
+    // Disable end-turn button while AI is running
+    const endBtn = document.getElementById('end-turn-btn');
+    endBtn.disabled = true;
+
+    function _runNextCpu() {
+        if (!game.currentCiv().isCpu || game.winner) {
+            endBtn.disabled = false;
+            _afterAllCpu();
+            return;
+        }
         const cpuCiv = game.currentCiv();
         aiTakeTurn(game, cpuCiv);
         game.endTurn();
+        renderer.draw();
+        setTimeout(_runNextCpu, 100);
     }
 
+    _runNextCpu();
+}
+
+function _afterAllCpu() {
     // Record scores once per round (when human player's turn begins)
     recordScores();
 
