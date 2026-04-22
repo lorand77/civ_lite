@@ -212,6 +212,34 @@
         #tech-overlay-hint { color: #5a6a80; font-size: 12px; }
         #tech-tree-canvas { border: 1px solid #2a3040; border-radius: 4px; cursor: pointer; }
 
+        /* Stats overlay */
+        #stats-overlay {
+            position: fixed; inset: 0; z-index: 250;
+            background: rgba(0,0,5,0.82);
+            display: flex; align-items: center; justify-content: center;
+        }
+        #stats-overlay.hidden { display: none; }
+        #stats-inner {
+            background: rgba(20,20,30,0.97);
+            border: 2px solid #646482;
+            border-radius: 6px;
+            overflow: hidden;
+            min-width: 580px;
+        }
+        #stats-table { width: 100%; border-collapse: collapse; }
+        #stats-table th {
+            padding: 10px 16px; font-size: 14px; font-weight: 700; text-align: center;
+            border-bottom: 1px solid #505068;
+        }
+        #stats-table th:first-child { text-align: left; min-width: 148px; }
+        #stats-table td {
+            padding: 5px 16px; font-size: 13px; text-align: center; height: 32px;
+        }
+        #stats-table td:first-child { text-align: left; color: #b4b4b4; }
+        .stats-stripe { background: rgba(255,255,255,0.05); }
+        .stats-leader { background: rgba(255,200,0,0.14) !important; }
+        #stats-hint { color: #646478; font-size: 11px; text-align: right; padding: 5px 10px; }
+
         /* Victory overlay */
         #victory-overlay {
             position: fixed; inset: 0; z-index: 300;
@@ -246,6 +274,16 @@
         <div id="victory-sep"></div>
         <canvas id="victory-graph"></canvas>
         <button id="victory-new-game">New Game</button>
+    </div>
+</div>
+
+<div id="stats-overlay" class="hidden">
+    <div id="stats-inner">
+        <table id="stats-table">
+            <thead><tr id="stats-header-row"></tr></thead>
+            <tbody id="stats-body"></tbody>
+        </table>
+        <div id="stats-hint">S or Escape — close</div>
     </div>
 </div>
 
@@ -535,6 +573,107 @@ document.getElementById('victory-new-game').addEventListener('click', () => {
     document.getElementById('seed-input').value = seed;
     initGame(seed);
 });
+
+// ============================================================
+// Stats window
+// ============================================================
+
+const STAT_ROWS = [
+    { label: 'Military Strength', key: 'mil_str',  color: '#ff7878' },
+    { label: 'Gold',              key: 'gold',      color: '#ffd700' },
+    { label: 'Gold / Turn',       key: 'gpt',       color: '#dcb900' },
+    { label: 'Cities',            key: 'cities',    color: '#b4dcff' },
+    { label: 'Population',        key: 'pop',       color: '#8cdc8c' },
+    { label: 'Science / Turn',    key: 'sci_pt',    color: '#78b4ff' },
+    { label: 'Production / Turn', key: 'ppt',       color: '#e08840' },
+    { label: 'Techs Researched',  key: 'techs',     color: '#c88cff' },
+    { label: 'Territory',         key: 'territory', color: '#a0c8a0' },
+    { label: 'Score',             key: 'score',     color: '#ffc850' },
+    { label: 'Capital HP',        key: 'cap_hp',    color: '#ff6464' },
+];
+
+function _buildCivStats(civ) {
+    if (civ.isEliminated) return null;
+    const milStr    = civ.units.filter(u => !u.isCivilian)
+                               .reduce((s, u) => s + UNIT_DEFS[u.unitType].strength, 0);
+    const territory = [...game.tiles.values()].filter(t => t.owner === civ.playerIndex).length;
+    const allYields = civ.cities.map(c => computeCityYields(c, game.tiles, civ));
+    const gpt = allYields.reduce((s, y) => s + y.gold, 0);
+    const spt = allYields.reduce((s, y) => s + y.science, 0);
+    const ppt = allYields.reduce((s, y) => s + y.prod, 0);
+    return {
+        mil_str:   milStr,
+        gold:      civ.gold,
+        gpt,
+        cities:    civ.cities.length,
+        pop:       civ.cities.reduce((s, c) => s + c.population, 0),
+        sci_pt:    spt,
+        ppt,
+        techs:     civ.techsResearched.size,
+        territory,
+        score:     computeScore(civ),
+        cap_hp:    civ.originalCapital?.hp ?? 0,
+    };
+}
+
+function openStats() {
+    const overlay = document.getElementById('stats-overlay');
+    overlay.classList.remove('hidden');
+
+    const civStats = game.civs.map(civ => _buildCivStats(civ));
+
+    // Header row
+    const hdr = document.getElementById('stats-header-row');
+    hdr.innerHTML = '<th></th>';
+    for (const civ of game.civs) {
+        const th = document.createElement('th');
+        th.textContent = civ.isEliminated ? `${civ.name} (elim)` : civ.name;
+        th.style.color = civ.isEliminated ? '#5a5a5a' : PLAYER_COLORS[civ.playerIndex];
+        hdr.appendChild(th);
+    }
+
+    // Body rows
+    const tbody = document.getElementById('stats-body');
+    tbody.innerHTML = '';
+    STAT_ROWS.forEach(({ label, key, color }, rowIdx) => {
+        const tr = document.createElement('tr');
+        if (rowIdx % 2 === 0) tr.className = 'stats-stripe';
+
+        const tdLabel = document.createElement('td');
+        tdLabel.textContent = label;
+        tr.appendChild(tdLabel);
+
+        // Find best value among active civs
+        const activeVals = civStats.filter(Boolean).map(s => s[key]);
+        const best = activeVals.length ? Math.max(...activeVals) : null;
+
+        for (const civ of game.civs) {
+            const td = document.createElement('td');
+            const stats = civStats[civ.playerIndex];
+            if (!stats) {
+                td.textContent = '—';
+                td.style.color = '#4a4a4a';
+            } else {
+                const v = stats[key];
+                const isLeader = best !== null && v === best;
+                if (isLeader) td.classList.add('stats-leader');
+                if (key === 'gpt') {
+                    td.textContent = v > 0 ? `+${v}` : String(v);
+                    td.style.color = v > 0 ? '#64dc64' : v < 0 ? '#ff5050' : '#888';
+                } else {
+                    td.textContent = String(v);
+                    td.style.color = isLeader ? '#ffe850' : color;
+                }
+            }
+            tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+    });
+}
+
+function closeStats() {
+    document.getElementById('stats-overlay').classList.add('hidden');
+}
 
 // ============================================================
 // Init / New Game
@@ -1124,9 +1263,17 @@ document.addEventListener('keydown', e => {
             break;
 
         case 'Escape':
+            closeStats();
             closeTechTree();
             deselect(); renderer.draw(); updateSidebar();
             break;
+
+        case 's': case 'S': {
+            const _so = document.getElementById('stats-overlay');
+            if (_so.classList.contains('hidden')) openStats();
+            else closeStats();
+            break;
+        }
 
         case 't': case 'T': {
             const _overlay = document.getElementById('tech-overlay');
