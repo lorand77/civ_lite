@@ -211,11 +211,43 @@
         #tech-overlay-title { color: #e8d48b; font-size: 18px; font-weight: 700; letter-spacing: 1px; }
         #tech-overlay-hint { color: #5a6a80; font-size: 12px; }
         #tech-tree-canvas { border: 1px solid #2a3040; border-radius: 4px; cursor: pointer; }
+
+        /* Victory overlay */
+        #victory-overlay {
+            position: fixed; inset: 0; z-index: 300;
+            background: rgba(0,0,0,0.88);
+            display: flex; align-items: center; justify-content: center;
+        }
+        #victory-overlay.hidden { display: none; }
+        #victory-inner { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+        #victory-title {
+            color: #ffd700; font-size: 72px; font-weight: 900; letter-spacing: 4px;
+            text-shadow: 0 0 40px #ffd70066;
+        }
+        #victory-subtitle { font-size: 26px; font-weight: 600; }
+        #victory-sep { width: 640px; height: 1px; background: #3a3a6a; margin: 2px 0; }
+        #victory-graph { border: 1px solid #3a3a5a; border-radius: 4px; }
+        #victory-new-game {
+            margin-top: 6px; padding: 10px 36px; font-size: 16px;
+            background: #6e1a1a; border: 2px solid #c84040; color: #fff;
+            cursor: pointer; border-radius: 4px;
+        }
+        #victory-new-game:hover { background: #9e2a2a; }
     </style>
 </head>
 <body>
 
 <canvas id="game-canvas"></canvas>
+
+<div id="victory-overlay" class="hidden">
+    <div id="victory-inner">
+        <div id="victory-title">VICTORY!</div>
+        <div id="victory-subtitle"></div>
+        <div id="victory-sep"></div>
+        <canvas id="victory-graph"></canvas>
+        <button id="victory-new-game">New Game</button>
+    </div>
+</div>
 
 <div id="tech-overlay" class="hidden">
     <div id="tech-overlay-inner">
@@ -366,11 +398,150 @@ let sel = { unit: null, city: null, reachable: new Map(), attackable: new Set() 
 // Last combat/event message
 let lastMsg = '';
 
+// Score history: array of [p0, p1, p2, p3] snapshots, one per game turn
+let scoreHistory = [];
+
+// ============================================================
+// Score + Victory
+// ============================================================
+
+function computeScore(civ) {
+    if (civ.isEliminated) return 0;
+    let score = 0;
+    score += civ.cities.length * 50;
+    score += civ.cities.reduce((s, c) => s + c.population, 0) * 20;
+    score += civ.units.filter(u => !u.isCivilian)
+                      .reduce((s, u) => s + UNIT_DEFS[u.unitType].strength, 0) * 3;
+    score += civ.techsResearched.size * 20;
+    score += [...game.tiles.values()].filter(t => t.owner === civ.playerIndex).length;
+    score += Math.trunc(civ.gold / 10);
+    for (const city of civ.cities)
+        for (const bKey of city.buildings) {
+            const b = BUILDING_DEFS[bKey]; if (!b) continue;
+            const eff = b.effects ?? {};
+            score += (eff.food_per_turn    ?? 0) * 4;
+            score += (eff.prod_per_turn    ?? 0) * 5;
+            score += (eff.gold_per_turn    ?? 0) * 3;
+            score += (eff.science_per_turn ?? 0) * 6;
+            score += (eff.culture_per_turn ?? 0) * 2;
+            score += (b.defense            ?? 0) * 8;
+        }
+    return score;
+}
+
+function recordScores() {
+    scoreHistory.push(game.civs.map(civ => computeScore(civ)));
+}
+
+function showVictoryScreen(winnerIdx) {
+    const civ = game.civs[winnerIdx];
+    document.getElementById('victory-subtitle').textContent =
+        `${civ.name} achieves Domination!`;
+    document.getElementById('victory-subtitle').style.color = PLAYER_COLORS[winnerIdx];
+    document.getElementById('victory-overlay').classList.remove('hidden');
+    _drawVictoryGraph();
+}
+
+function _drawVictoryGraph() {
+    const canvas = document.getElementById('victory-graph');
+    const W = Math.min(window.innerWidth - 80, 760);
+    const H = 220;
+    canvas.width  = W;
+    canvas.height = H;
+
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#08080f';
+    ctx.fillRect(0, 0, W, H);
+
+    if (scoreHistory.length < 2) return;
+
+    const PAD_L = 52, PAD_R = 20, PAD_T = 28, PAD_B = 30;
+    const pw = W - PAD_L - PAD_R;
+    const ph = H - PAD_T - PAD_B;
+    const px = PAD_L, py = PAD_T;
+
+    const maxScore = Math.max(1, ...scoreHistory.flatMap(t => t));
+    const numTurns = scoreHistory.length;
+
+    // Title
+    ctx.fillStyle = '#9090b8';
+    ctx.font = '13px sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.fillText('Score History', px, 8);
+
+    // Grid lines
+    ctx.strokeStyle = '#1c1c30';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 5; i++) {
+        const gy = py + ph - Math.round(ph * i / 5);
+        ctx.beginPath(); ctx.moveTo(px, gy); ctx.lineTo(px + pw, gy); ctx.stroke();
+        ctx.fillStyle = '#5a5a7a';
+        ctx.font = '11px sans-serif';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'right';
+        ctx.fillText(Math.round(maxScore * i / 5), px - 4, gy);
+    }
+
+    // Plot border
+    ctx.strokeStyle = '#323258';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px, py, pw, ph);
+
+    // Civ score lines
+    for (let ci = 0; ci < game.civs.length; ci++) {
+        const color = PLAYER_COLORS[ci];
+        ctx.strokeStyle = game.civs[ci].isEliminated ? '#444' : color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let ti = 0; ti < numTurns; ti++) {
+            const x = px + Math.round(ti * pw / Math.max(1, numTurns - 1));
+            const y = py + ph - Math.round(scoreHistory[ti][ci] * ph / maxScore);
+            ti === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+    }
+
+    // X-axis labels
+    ctx.fillStyle = '#5a5a7a';
+    ctx.font = '11px sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText('Turn 1', px, py + ph + 6);
+    ctx.textAlign = 'right';
+    ctx.fillText(`Turn ${numTurns}`, px + pw, py + ph + 6);
+
+    // Legend (top-right inside plot)
+    const lx = px + pw - 130, ly = py + 6;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    for (let ci = 0; ci < game.civs.length; ci++) {
+        const row   = ly + ci * 18;
+        const color = game.civs[ci].isEliminated ? '#444' : PLAYER_COLORS[ci];
+        ctx.fillStyle = color;
+        ctx.fillRect(lx, row - 5, 18, 10);
+        ctx.fillStyle = '#ccc';
+        ctx.font = '11px sans-serif';
+        const label = game.civs[ci].isEliminated
+            ? `${PLAYER_NAMES[ci]} (elim)`
+            : `${PLAYER_NAMES[ci]}: ${scoreHistory[scoreHistory.length - 1][ci]}`;
+        ctx.fillText(label, lx + 22, row);
+    }
+}
+
+document.getElementById('victory-new-game').addEventListener('click', () => {
+    document.getElementById('victory-overlay').classList.add('hidden');
+    scoreHistory = [];
+    const seed = Math.floor(Math.random() * 1_000_000);
+    document.getElementById('seed-input').value = seed;
+    initGame(seed);
+});
+
 // ============================================================
 // Init / New Game
 // ============================================================
 
 function initGame(seed) {
+    scoreHistory = [];
     game = new Game({ seed });
     if (!_rendererReady) {
         renderer = new HexRenderer(canvas, PLAYER_COLORS);
@@ -475,6 +646,7 @@ function handleClick(tile) {
             deselect();
             renderer.draw();
             updateSidebar();
+            if (game.winner !== null) { recordScores(); showVictoryScreen(game.winner); }
             return;
         }
     }
@@ -1044,7 +1216,14 @@ function doEndTurn() {
         game.endTurn();
     }
 
+    // Record scores once per round (when human player's turn begins)
+    recordScores();
+
     renderer.knownTechs = game.currentCiv().techsResearched;
+    renderer.draw();
+    updateSidebar();
+
+    if (game.winner !== null) { showVictoryScreen(game.winner); return; }
 
     // Prompt for research if the now-active human civ has nothing queued
     const civ = game.currentCiv();
@@ -1054,9 +1233,6 @@ function doEndTurn() {
     } else {
         closeTechTree();
     }
-
-    renderer.draw();
-    updateSidebar();
 }
 </script>
 </body>
