@@ -141,7 +141,14 @@
         }
         .prod-item:hover { background: #1e2a40; border-color: #3a4a60; }
         .prod-item.active { border-color: #e8d48b; background: #1e2820; }
-        .prod-item .cost { color: #e8d48b; font-size: 11px; }
+        .prod-item .cost { color: #e8d48b; font-size: 11px; margin-left: 8px; margin-right: auto; }
+        .prod-item .buy-btn {
+            margin-left: auto; padding: 1px 6px; font-size: 10px;
+            background: #3a2a00; border: 1px solid #8a6a00; border-radius: 3px;
+            color: #ffd060; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+        }
+        .prod-item .buy-btn:hover { background: #5a4000; }
+        .prod-item .buy-btn:disabled { opacity: 0.35; cursor: default; }
 
         /* Messages */
         #msg-text {
@@ -1195,11 +1202,23 @@ function renderProductionList(city, civ) {
     for (const item of buildable) {
         const el = document.createElement('div');
         el.className = 'prod-item' + (city.productionQueue[0] === item.key ? ' active' : '');
-        el.innerHTML = `<span>${item.name}</span><span class="cost">${item.cost}⚙</span>`;
-        el.addEventListener('click', () => {
+        const goldCost = item.cost * 2;
+        const canAfford = civ.gold >= goldCost;
+        el.innerHTML = `<span>${item.name}</span><span class="cost">${item.cost}⚙</span><button class="buy-btn" ${canAfford ? '' : 'disabled'} title="Purchase for ${goldCost} gold">${goldCost}g</button>`;
+        el.addEventListener('click', (e) => {
+            if (e.target.classList.contains('buy-btn')) return;
             city.productionQueue = [item.key];
             city.productionProgress = 0;
             renderCityPanel(city, civ);
+        });
+        el.querySelector('.buy-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!canAfford) return;
+            const [ok] = game.buyItem(city, item.key);
+            if (ok) {
+                renderCityPanel(city, civ);
+                renderSidebar();
+            }
         });
         list.appendChild(el);
     }
