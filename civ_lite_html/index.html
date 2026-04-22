@@ -199,6 +199,53 @@
         /* Scrollable list inside panel */
         .scroll-list { max-height: 180px; overflow-y: auto; }
 
+        /* Setup screen */
+        #setup-overlay {
+            position: fixed; inset: 0; z-index: 400;
+            background: #14141e;
+            display: flex; align-items: center; justify-content: center;
+        }
+        #setup-overlay.hidden { display: none; }
+        #setup-inner {
+            background: #1e1e2e; border: 2px solid #646482; border-radius: 8px;
+            padding: 28px 36px 24px; width: 520px;
+        }
+        #setup-title {
+            color: #e0e0f0; font-size: 20px; font-weight: 700;
+            text-align: center; margin-bottom: 14px; letter-spacing: 1px;
+        }
+        #setup-sep { height: 1px; background: #646482; margin-bottom: 16px; }
+        .setup-row {
+            display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+        }
+        .setup-swatch { width: 20px; height: 20px; border-radius: 3px; flex-shrink: 0; }
+        .setup-name { flex: 1; font-size: 15px; font-weight: 600; }
+        .setup-diff-btn, .setup-cpu-btn {
+            padding: 5px 0; width: 96px; font-size: 13px; font-weight: 600;
+            border: 1px solid #646482; border-radius: 4px; color: #eee; cursor: pointer;
+        }
+        .setup-diff-btn.prince  { background: #464658; }
+        .setup-diff-btn.king    { background: #7a6418; }
+        .setup-diff-btn.emperor { background: #783232; }
+        .setup-diff-btn:hover   { filter: brightness(1.3); }
+        .setup-cpu-btn.human  { background: #2850a0; }
+        .setup-cpu-btn.cpu    { background: #464658; }
+        .setup-cpu-btn:hover  { filter: brightness(1.3); }
+        #setup-seed-row {
+            display: flex; align-items: center; gap: 8px;
+            margin-top: 14px; font-size: 12px; color: #5a6a80;
+        }
+        #setup-seed-input {
+            width: 80px; background: rgba(0,0,0,0.4); border: 1px solid #333;
+            border-radius: 3px; color: #eee; font-size: 12px; padding: 3px 6px;
+        }
+        #setup-start {
+            display: block; width: 100%; margin-top: 18px; padding: 12px;
+            font-size: 16px; font-weight: 700; background: #2a6a2a;
+            border: 2px solid #50a050; border-radius: 5px; color: #fff; cursor: pointer;
+        }
+        #setup-start:hover { background: #3a8a3a; }
+
         /* Tech tree overlay */
         #tech-overlay {
             position: fixed; inset: 0; z-index: 200;
@@ -264,6 +311,20 @@
     </style>
 </head>
 <body>
+
+<div id="setup-overlay">
+    <div id="setup-inner">
+        <div id="setup-title">Civ Lite — Player Setup</div>
+        <div id="setup-sep"></div>
+        <div id="setup-rows"></div>
+        <div id="setup-seed-row">
+            <label>Seed</label>
+            <input id="setup-seed-input" type="number">
+            <button onclick="document.getElementById('setup-seed-input').value = Math.floor(Math.random()*1000000)" style="font-size:11px;padding:2px 6px">Random</button>
+        </div>
+        <button id="setup-start">Start Game</button>
+    </div>
+</div>
 
 <canvas id="game-canvas"></canvas>
 
@@ -568,10 +629,7 @@ function _drawVictoryGraph() {
 
 document.getElementById('victory-new-game').addEventListener('click', () => {
     document.getElementById('victory-overlay').classList.add('hidden');
-    scoreHistory = [];
-    const seed = Math.floor(Math.random() * 1_000_000);
-    document.getElementById('seed-input').value = seed;
-    initGame(seed);
+    openSetup();
 });
 
 // ============================================================
@@ -676,12 +734,80 @@ function closeStats() {
 }
 
 // ============================================================
+// Setup screen
+// ============================================================
+
+const _setupState = {
+    isCpu:       [false, true, true, true],
+    difficulty:  ['prince', 'prince', 'prince', 'prince'],
+};
+const _DIFFICULTIES = ['prince', 'king', 'emperor'];
+const _DIFF_BG = { prince: '#464658', king: '#7a6418', emperor: '#783232' };
+
+function openSetup() {
+    const seed = Math.floor(Math.random() * 1_000_000);
+    document.getElementById('setup-seed-input').value = seed;
+    document.getElementById('seed-input').value = seed;
+    document.getElementById('setup-overlay').classList.remove('hidden');
+    _renderSetupRows();
+}
+
+function _renderSetupRows() {
+    const container = document.getElementById('setup-rows');
+    container.innerHTML = '';
+    for (let i = 0; i < 4; i++) {
+        const row = document.createElement('div');
+        row.className = 'setup-row';
+
+        const swatch = document.createElement('div');
+        swatch.className = 'setup-swatch';
+        swatch.style.background = PLAYER_COLORS[i];
+        row.appendChild(swatch);
+
+        const name = document.createElement('div');
+        name.className = 'setup-name';
+        name.textContent = PLAYER_NAMES[i];
+        name.style.color = PLAYER_COLORS[i];
+        row.appendChild(name);
+
+        const diffBtn = document.createElement('button');
+        const diff = _setupState.difficulty[i];
+        diffBtn.className = `setup-diff-btn ${diff}`;
+        diffBtn.textContent = diff.charAt(0).toUpperCase() + diff.slice(1);
+        diffBtn.addEventListener('click', () => {
+            const idx = _DIFFICULTIES.indexOf(_setupState.difficulty[i]);
+            _setupState.difficulty[i] = _DIFFICULTIES[(idx + 1) % 3];
+            _renderSetupRows();
+        });
+        row.appendChild(diffBtn);
+
+        const cpuBtn = document.createElement('button');
+        cpuBtn.className = `setup-cpu-btn ${_setupState.isCpu[i] ? 'cpu' : 'human'}`;
+        cpuBtn.textContent = _setupState.isCpu[i] ? 'CPU' : 'Human';
+        cpuBtn.addEventListener('click', () => {
+            _setupState.isCpu[i] = !_setupState.isCpu[i];
+            _renderSetupRows();
+        });
+        row.appendChild(cpuBtn);
+
+        container.appendChild(row);
+    }
+}
+
+document.getElementById('setup-start').addEventListener('click', () => {
+    const seed = parseInt(document.getElementById('setup-seed-input').value, 10) || 0;
+    document.getElementById('seed-input').value = seed;
+    document.getElementById('setup-overlay').classList.add('hidden');
+    initGame(seed, [..._setupState.isCpu], [..._setupState.difficulty]);
+});
+
+// ============================================================
 // Init / New Game
 // ============================================================
 
-function initGame(seed) {
+function initGame(seed, cpuFlags = null, difficultyFlags = null) {
     scoreHistory = [];
-    game = new Game({ seed });
+    game = new Game({ seed, cpuFlags, difficultyFlags });
     if (!_rendererReady) {
         renderer = new HexRenderer(canvas, PLAYER_COLORS);
         renderer.onClick = handleClick;
@@ -695,14 +821,11 @@ function initGame(seed) {
     renderer.draw();
 }
 
-// Start with a random seed each page load
-const _startSeed = Math.floor(Math.random() * 1_000_000);
-document.getElementById('seed-input').value = _startSeed;
-initGame(_startSeed);
+// Show setup screen on page load
+openSetup();
 
 document.getElementById('new-map-btn').addEventListener('click', () => {
-    const seed = parseInt(document.getElementById('seed-input').value, 10) || 0;
-    initGame(seed);
+    openSetup();
 });
 document.getElementById('seed-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('new-map-btn').click();
