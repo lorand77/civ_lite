@@ -363,9 +363,10 @@ class HexRenderer {
         ctx.stroke();
     }
 
-    _drawHpBar(ctx, cx, cy, hs, hp, hpMax) {
-        const w  = hs * 0.9, h = Math.max(2, hs * 0.07);
-        const x  = cx - w / 2,  y = cy + hs * 0.52;
+    _drawHpBar(ctx, cx, cy, hs, hp, hpMax, r = null) {
+        const w   = hs * 0.9, h = Math.max(2, hs * 0.07);
+        const x   = cx - w / 2;
+        const y   = r !== null ? cy + r + 3 : cy + hs * 0.52;
         const pct = hp / hpMax;
         const color = pct > 0.6 ? '#4c4' : pct > 0.3 ? '#cc4' : '#c44';
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -377,33 +378,46 @@ class HexRenderer {
     _drawCity(cx, cy, hs, city) {
         const ctx   = this.ctx;
         const color = this.civColors[city.owner] ?? '#888';
-        const r     = hs * 0.38;
+        const r     = Math.max(8, Math.floor(hs / 3));
 
-        // Diamond shape
+        // Circle
         ctx.beginPath();
-        ctx.moveTo(cx,     cy - r);
-        ctx.lineTo(cx + r, cy);
-        ctx.lineTo(cx,     cy + r);
-        ctx.lineTo(cx - r, cy);
-        ctx.closePath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fillStyle   = color;
         ctx.fill();
-        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-        ctx.lineWidth   = Math.max(1, hs * 0.04);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth   = 2;
         ctx.stroke();
 
-        // HP bar (only if damaged) — drawn just below the diamond tip
-        if (city.hp < 50) this._drawHpBar(ctx, cx, cy, hs, city.hp, 50);
+        // Gold ring for original capital
+        if (city.isOriginalCapital) {
+            ctx.beginPath();
+            ctx.arc(cx, cy, r + 3, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth   = 2;
+            ctx.stroke();
+        }
 
-        // Label — below the HP bar area so it never overlaps
+        // Population number centered on circle
+        const fs = Math.max(8, Math.floor(hs * 0.25));
+        ctx.font         = `bold ${fs}px sans-serif`;
+        ctx.fillStyle    = '#fff';
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(city.population), cx, cy);
+
+        // HP bar just below circle
+        if (city.hp < 50) this._drawHpBar(ctx, cx, cy, hs, city.hp, 50, r);
+
+        // City name above circle
         if (hs > 18) {
-            const fs = Math.max(7, hs * 0.2);
-            ctx.font         = `bold ${fs}px sans-serif`;
+            const namefs = Math.max(7, Math.floor(hs * 0.2));
+            ctx.font         = `bold ${namefs}px sans-serif`;
             ctx.fillStyle    = '#fff';
             ctx.textAlign    = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(city.name.length > 8 ? city.name.slice(0, 7) + '…' : city.name,
-                         cx, cy + r + fs * 1.1);
+            ctx.textBaseline = 'bottom';
+            const label = city.name.length > 8 ? city.name.slice(0, 7) + '…' : city.name;
+            ctx.fillText(label, cx, cy - r - 3);
         }
     }
 

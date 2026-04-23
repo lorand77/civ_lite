@@ -823,6 +823,7 @@ class Game {
                 const tile       = this.tiles.get(`${unit.q},${unit.r}`);
                 const inTerritory = tile && tile.owner === civ.playerIndex;
                 unit.hp = Math.min(unit.hpMax, unit.hp + (inTerritory ? 20 : 10));
+                if (unit.hp >= unit.hpMax) unit.healing = false;
             }
             unit.movesLeft = UNIT_DEFS[unit.unitType].moves;
             if (unit.fortified) unit.fortifyBonus = Math.min(0.5, unit.fortifyBonus + 0.25);
