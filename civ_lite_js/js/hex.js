@@ -416,7 +416,11 @@ class HexRenderer {
             ctx.fillStyle    = '#fff';
             ctx.textAlign    = 'center';
             ctx.textBaseline = 'bottom';
-            const label = city.name.length > 8 ? city.name.slice(0, 7) + '…' : city.name;
+            const maxW = hs * 2.2;
+            let label = city.name;
+            while (label.length > 1 && ctx.measureText(label).width > maxW)
+                label = label.slice(0, -1);
+            if (label !== city.name) label = label.trimEnd() + '…';
             ctx.fillText(label, cx, cy - r - 3);
         }
     }

@@ -42,6 +42,7 @@ let lastMsg = '';
 
 // Score history: array of [p0, p1, p2, p3] snapshots, one per game turn
 let scoreHistory = [];
+let _victoryShown = false;
 
 // ============================================================
 // Score + Victory
@@ -76,6 +77,8 @@ function recordScores() {
 }
 
 function showVictoryScreen(winnerIdx) {
+    if (_victoryShown) return;
+    _victoryShown = true;
     const civ = game.civs[winnerIdx];
     document.getElementById('victory-subtitle').textContent =
         `${civ.name} achieves Domination!`;
@@ -350,6 +353,7 @@ document.getElementById('setup-start').addEventListener('click', () => {
 
 function initGame(seed, cpuFlags = null, difficultyFlags = null) {
     scoreHistory = [];
+    _victoryShown = false;
     game = new Game({ seed, cpuFlags, difficultyFlags });
     if (!_rendererReady) {
         renderer = new HexRenderer(canvas, PLAYER_COLORS);
@@ -415,9 +419,9 @@ function deselect() {
     document.getElementById('unit-panel').classList.add('hidden');
     document.getElementById('city-panel').classList.add('hidden');
     closeTechTree();
-    // Open tech tree if civ has no current research
+    // Open tech tree if human civ has no current research
     const civ = game.currentCiv();
-    if (!civ.currentResearch && availableTechs(civ.techsResearched).length > 0) {
+    if (!civ.isCpu && !civ.currentResearch && availableTechs(civ.techsResearched).length > 0) {
         openTechTree();
     }
 }
@@ -1066,10 +1070,12 @@ function _afterAllCpu() {
 
     // Prompt for research if the now-active human civ has nothing queued
     const civ = game.currentCiv();
-    const hasTechs = availableTechs(civ.techsResearched).length > 0;
-    if (!civ.currentResearch && hasTechs) {
-        openTechTree();
-    } else {
-        closeTechTree();
+    if (!civ.isCpu) {
+        const hasTechs = availableTechs(civ.techsResearched).length > 0;
+        if (!civ.currentResearch && hasTechs) {
+            openTechTree();
+        } else {
+            closeTechTree();
+        }
     }
 }
