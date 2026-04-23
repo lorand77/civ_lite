@@ -377,7 +377,7 @@ document.getElementById('seed-input').addEventListener('keydown', e => {
 window.addEventListener('resize', () => {
     canvas.width  = window.innerWidth - SIDEBAR_W;
     canvas.height = window.innerHeight;
-    renderer.draw();
+    if (renderer) renderer.draw();
 });
 
 // ============================================================
@@ -753,7 +753,7 @@ function renderProductionList(city, civ) {
             const [ok] = game.buyItem(city, item.key);
             if (ok) {
                 renderCityPanel(city, civ);
-                renderSidebar();
+                updateSidebar();
             }
         });
         list.appendChild(el);
