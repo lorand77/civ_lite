@@ -10,7 +10,7 @@
 const UNIT_DEFS = {
     warrior: {
         name: 'Warrior', type: 'melee',
-        strength: 8, moves: 2, hp_max: 100, prod_cost: 40,
+        strength: 8, moves: 2, hp_max: 100, prod_cost: 1,
         requires_tech: null, requires_resource: null, label: 'W',
     },
     archer: {
@@ -406,10 +406,11 @@ function getAttackableTiles(unit, tiles) {
     const targets     = new Set();
 
     if (attackRange === 1) {
-        // Melee: adjacent only
+        // Melee: adjacent only — requires enough moves to enter the target tile
         for (const [nq, nr] of hexNeighbors(unit.q, unit.r)) {
             const tile = tiles.get(`${nq},${nr}`);
             if (!tile) continue;
+            if ((TERRAIN_MOVE_COST[tile.terrain] ?? 1) > unit.movesLeft) continue;
             // City checked first — matches doAttack dispatch priority
             if (tile.city && tile.city.owner !== unit.owner) targets.add(`${nq},${nr}`);
             else if (tile.unit && tile.unit.owner !== unit.owner) targets.add(`${nq},${nr}`);
