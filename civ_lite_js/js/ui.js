@@ -1054,6 +1054,11 @@ function doEndTurn() {
         const cpuCiv = game.currentCiv();
         aiTakeTurn(game, cpuCiv);
         game.endTurn();
+        const allCpu = game.civs.every(c => c.isCpu);
+        if (allCpu) {
+            renderer.knownTechs = game.currentCiv().techsResearched;
+            updateSidebar();
+        }
         renderer.draw();
         setTimeout(_runNextCpu, 100);
     }
