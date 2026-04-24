@@ -1029,6 +1029,9 @@ function doEndTurn() {
 
     // Save civ BEFORE endTurn advances currentPlayer
     const prevCiv = game.currentCiv();
+    // If civ 0 is CPU, let AI act before endTurn so it can found its city
+    // before maintenance is deducted (otherwise it bankrupts on turn 1).
+    if (prevCiv.isCpu) aiTakeTurn(game, prevCiv);
     game.endTurn();
     prevCiv.researchJustCompleted = false;
 
