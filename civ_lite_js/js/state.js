@@ -10,7 +10,7 @@
 const UNIT_DEFS = {
     warrior: {
         name: 'Warrior', type: 'melee',
-        strength: 8, moves: 2, hp_max: 100, prod_cost: 1,
+        strength: 8, moves: 2, hp_max: 100, prod_cost: 40,
         requires_tech: null, requires_resource: null, label: 'W',
     },
     archer: {
