@@ -98,7 +98,7 @@ function _drawVictoryGraph() {
     ctx.fillStyle = '#08080f';
     ctx.fillRect(0, 0, W, H);
 
-    if (scoreHistory.length < 2) return;
+    if (scoreHistory.length < 1) return;
 
     const PAD_L = 52, PAD_R = 20, PAD_T = 28, PAD_B = 30;
     const pw = W - PAD_L - PAD_R;
@@ -107,6 +107,7 @@ function _drawVictoryGraph() {
 
     const maxScore = Math.max(1, ...scoreHistory.flatMap(t => t));
     const numTurns = scoreHistory.length;
+    const singlePoint = numTurns === 1;
 
     // Title
     ctx.fillStyle = '#9090b8';
@@ -137,13 +138,22 @@ function _drawVictoryGraph() {
         const color = PLAYER_COLORS[ci];
         ctx.strokeStyle = game.civs[ci].isEliminated ? '#444' : color;
         ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let ti = 0; ti < numTurns; ti++) {
-            const x = px + Math.round(ti * pw / Math.max(1, numTurns - 1));
-            const y = py + ph - Math.round(scoreHistory[ti][ci] * ph / maxScore);
-            ti === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        if (singlePoint) {
+            const x = px + pw / 2;
+            const y = py + ph - Math.round(scoreHistory[0][ci] * ph / maxScore);
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = game.civs[ci].isEliminated ? '#444' : color;
+            ctx.fill();
+        } else {
+            ctx.beginPath();
+            for (let ti = 0; ti < numTurns; ti++) {
+                const x = px + Math.round(ti * pw / (numTurns - 1));
+                const y = py + ph - Math.round(scoreHistory[ti][ci] * ph / maxScore);
+                ti === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            }
+            ctx.stroke();
         }
-        ctx.stroke();
     }
 
     // X-axis labels
@@ -1046,7 +1056,7 @@ function doEndTurn() {
     endBtn.disabled = true;
 
     function _runNextCpu() {
-        if (!game.currentCiv().isCpu || game.winner) {
+        if (!game.currentCiv().isCpu || game.winner !== null) {
             endBtn.disabled = false;
             _afterAllCpu();
             return;
@@ -1055,6 +1065,7 @@ function doEndTurn() {
         aiTakeTurn(game, cpuCiv);
         game.endTurn();
         const allCpu = game.civs.every(c => c.isCpu);
+        if (allCpu && game.currentPlayer === 0) recordScores();
         if (allCpu) {
             renderer.knownTechs = game.currentCiv().techsResearched;
             updateSidebar();
