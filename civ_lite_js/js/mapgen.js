@@ -166,3 +166,5 @@ function _placeResources(tiles, terrainGrid, cols, rows, rng) {
     place(hillsPos,    'silver',   8);
     place(forestHills, 'diamonds', 3);
 }
+
+if (typeof module !== 'undefined') module.exports = { generateMap, makePRNG, makeTile, offsetToAxial };

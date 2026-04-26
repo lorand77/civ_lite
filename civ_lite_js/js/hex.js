@@ -531,3 +531,8 @@ class HexRenderer {
         }, { passive: false });
     }
 }
+
+if (typeof module !== 'undefined') module.exports = {
+    hexNeighbors, hexDistance, hexesInRange, hexLine,
+    axialRound, hexToPixel, pixelToHex, hexCorners,
+};

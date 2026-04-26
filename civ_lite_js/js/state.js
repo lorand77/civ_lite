@@ -480,3 +480,11 @@ function autoAssignWorkedTiles(city, tiles, civ = null) {
         city.workedTiles.push([candidates[i].q, candidates[i].r]);
     }
 }
+
+if (typeof module !== 'undefined') module.exports = {
+    UNIT_DEFS, UNIT_UPGRADES, TECH_DEFS, BUILDING_DEFS, IMPROVEMENT_DEFS,
+    RESOURCES, TERRAIN_YIELDS, TERRAIN_DEFENSE_BONUS, TERRAIN_PASSABLE,
+    TERRAIN_MOVE_COST, TERRAIN_BLOCKS_LOS,
+    Unit, City, Civilization,
+    getReachableTiles, getAttackableTiles, autoAssignWorkedTiles,
+};

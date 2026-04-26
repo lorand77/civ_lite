@@ -705,3 +705,5 @@ function aiTakeTurn(game, civ) {
 
     _actGold(game, civ, flavors);
 }
+
+if (typeof module !== 'undefined') module.exports = { aiTakeTurn };
