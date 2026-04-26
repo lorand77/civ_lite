@@ -529,8 +529,31 @@ function handleHover(tile, e) {
 // Sidebar rendering
 // ============================================================
 
+function updateScoreboard() {
+    const sb = document.getElementById('scoreboard');
+    sb.classList.remove('hidden');
+    const entries = game.civs
+        .map(c => ({ civ: c, score: computeScore(c, game) }))
+        .sort((a, b) => b.score - a.score);
+
+    let html = '<div class="sb-title">SCORES</div>';
+    for (const { civ, score } of entries) {
+        const color = civ.isEliminated ? '#505058' : civ.color;
+        const cls   = civ.isEliminated ? ' sb-elim' : '';
+        const label = civ.isEliminated ? 'eliminated' : score;
+        html += `<div class="sb-row${cls}">`
+             +  `<div class="sb-swatch" style="background:${color}"></div>`
+             +  `<div class="sb-name" style="color:${color}">${civ.name}</div>`
+             +  `<div class="sb-score" style="color:${color}">${label}</div>`
+             +  `</div>`;
+    }
+    sb.innerHTML = html;
+}
+
 function updateSidebar() {
     const civ = game.currentCiv();
+
+    updateScoreboard();
 
     // Turn / civ label
     const dot = `<span class="civ-dot" style="background:${PLAYER_COLORS[civ.playerIndex]}"></span>`;

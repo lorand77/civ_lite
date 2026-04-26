@@ -250,6 +250,38 @@ function availableTechs(techsResearched) {
 }
 
 // ============================================================
+// Score — port of systems/score.py
+// ============================================================
+
+function computeScore(civ, game) {
+    if (civ.isEliminated) return 0;
+
+    let score = 0;
+    score += civ.cities.length * 50;
+    score += civ.cities.reduce((s, c) => s + c.population, 0) * 20;
+    score += civ.units
+        .filter(u => !u.isCivilian)
+        .reduce((s, u) => s + UNIT_DEFS[u.unitType].strength, 0) * 3;
+    score += civ.techsResearched.size * 20;
+    for (const t of game.tiles.values()) if (t.owner === civ.playerIndex) score += 1;
+    score += Math.floor(civ.gold / 10);
+
+    for (const city of civ.cities) {
+        for (const bKey of city.buildings) {
+            const defn = BUILDING_DEFS[bKey];
+            const eff  = defn.effects ?? {};
+            score += (eff.food_per_turn    ?? 0) * 4;
+            score += (eff.prod_per_turn    ?? 0) * 5;
+            score += (eff.gold_per_turn    ?? 0) * 3;
+            score += (eff.science_per_turn ?? 0) * 6;
+            score += (eff.culture_per_turn ?? 0) * 2;
+            score += (defn.defense         ?? 0) * 8;
+        }
+    }
+    return score;
+}
+
+// ============================================================
 // Game class
 // ============================================================
 
@@ -842,4 +874,4 @@ class Game {
     }
 }
 
-if (typeof module !== 'undefined') module.exports = { Game, computeCityYields, processProduction, availableTechs, canResearch, calcDamage, effectiveStrength, cityCombatStrength, meleeAttack, rangedAttack, bombardCity, getItemCost, CITY_NAMES, PLAYER_NAMES, PLAYER_COLORS, DIFFICULTY_DEFS, MAP_COLS, MAP_ROWS };
+if (typeof module !== 'undefined') module.exports = { Game, computeCityYields, processProduction, availableTechs, canResearch, computeScore, calcDamage, effectiveStrength, cityCombatStrength, meleeAttack, rangedAttack, bombardCity, getItemCost, CITY_NAMES, PLAYER_NAMES, PLAYER_COLORS, DIFFICULTY_DEFS, MAP_COLS, MAP_ROWS };
