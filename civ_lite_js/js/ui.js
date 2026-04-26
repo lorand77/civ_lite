@@ -27,8 +27,18 @@ const CARD_W = 160, CARD_H = 52;
 const TREE_W = 760, TREE_H = 410;
 
 const canvas  = document.getElementById('game-canvas');
-canvas.width  = window.innerWidth - SIDEBAR_W;
-canvas.height = window.innerHeight;
+canvas.style.touchAction = 'none';
+
+function _sizeGameCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = window.innerWidth - SIDEBAR_W;
+    const h = window.innerHeight;
+    canvas.style.width  = w + 'px';
+    canvas.style.height = h + 'px';
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+}
+_sizeGameCanvas();
 
 // Game + renderer instances
 let game, renderer;
@@ -389,8 +399,7 @@ document.getElementById('seed-input').addEventListener('keydown', e => {
 });
 
 window.addEventListener('resize', () => {
-    canvas.width  = window.innerWidth - SIDEBAR_W;
-    canvas.height = window.innerHeight;
+    _sizeGameCanvas();
     if (renderer) renderer.draw();
 });
 
@@ -782,8 +791,13 @@ function openTechTree() {
     const tc = document.getElementById('tech-tree-canvas');
     const maxW = Math.min(window.innerWidth - 40, TREE_W * 2);
     const scale = Math.min(1.6, maxW / TREE_W);
-    tc.width  = Math.round(TREE_W  * scale);
-    tc.height = Math.round(TREE_H  * scale);
+    const dpr = window.devicePixelRatio || 1;
+    const displayW = Math.round(TREE_W * scale);
+    const displayH = Math.round(TREE_H * scale);
+    tc.style.width  = displayW + 'px';
+    tc.style.height = displayH + 'px';
+    tc.width  = Math.round(displayW * dpr);
+    tc.height = Math.round(displayH * dpr);
     tc._treeScale = scale;
     drawTechTree(tc, game.currentCiv());
 }
@@ -794,12 +808,13 @@ function closeTechTree() {
 
 function drawTechTree(tc, civ) {
     const scale = tc._treeScale ?? 1;
+    const dpr = window.devicePixelRatio || 1;
     const ctx = tc.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, tc.width, tc.height);
     ctx.fillStyle = '#080c18';
     ctx.fillRect(0, 0, tc.width, tc.height);
-    ctx.save();
-    ctx.scale(scale, scale);
+    ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
 
     // Draw arrows behind cards
     for (const [key, defn] of Object.entries(TECH_DEFS)) {
@@ -869,8 +884,6 @@ function drawTechTree(tc, civ) {
             ctx.fillText(text, pos.x + 6, pos.y + 34);
         }
     }
-
-    ctx.restore();
 }
 
 function _drawArrow(ctx, x1, y1, x2, y2, color) {
@@ -943,6 +956,12 @@ function clearMessages() {
 // ============================================================
 
 document.getElementById('end-turn-btn').addEventListener('click', doEndTurn);
+
+document.getElementById('stats-btn').addEventListener('click', () => {
+    const so = document.getElementById('stats-overlay');
+    if (so.classList.contains('hidden')) openStats();
+    else closeStats();
+});
 
 document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT') return;

@@ -111,12 +111,6 @@ class HexRenderer {
         this.offsetY = 0;
         this.scale   = 1.0;
 
-        // Pan tracking
-        this._dragging    = false;
-        this._dragStartX  = 0; this._dragStartY  = 0;
-        this._dragOriginX = 0; this._dragOriginY = 0;
-        this._mouseDownX  = 0; this._mouseDownY  = 0;
-
         this.tiles = new Map();
 
         // Overlay state (set via setOverlays)
@@ -196,15 +190,17 @@ class HexRenderer {
         return [(sx - this.offsetX) / this.scale, (sy - this.offsetY) / this.scale];
     }
     _centerView() {
-        this.offsetX = this.canvas.width  / 2;
-        this.offsetY = this.canvas.height / 2;
+        this.offsetX = this.canvas.clientWidth  / 2;
+        this.offsetY = this.canvas.clientHeight / 2;
     }
 
     // ---- Draw ----
 
     draw() {
-        const ctx     = this.ctx;
-        const W = this.canvas.width, H = this.canvas.height;
+        const ctx = this.ctx;
+        const W = this.canvas.clientWidth, H = this.canvas.clientHeight;
+        const dpr = window.devicePixelRatio || 1;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.clearRect(0, 0, W, H);
         ctx.fillStyle = '#0a0a1a';
         ctx.fillRect(0, 0, W, H);
@@ -476,54 +472,107 @@ class HexRenderer {
 
     _bindEvents() {
         const canvas = this.canvas;
+        const pointers = new Map();
+        let pinch = null;
+        let drag  = null;
 
-        canvas.addEventListener('mousedown', e => {
+        const localXY = (clientX, clientY) => {
+            const rect = canvas.getBoundingClientRect();
+            return [clientX - rect.left, clientY - rect.top];
+        };
+
+        canvas.addEventListener('pointerdown', e => {
             if (e.button !== 0) return;
-            this._mouseDownX  = e.clientX;
-            this._mouseDownY  = e.clientY;
-            this._dragging    = true;
-            this._dragStartX  = e.clientX;
-            this._dragStartY  = e.clientY;
-            this._dragOriginX = this.offsetX;
-            this._dragOriginY = this.offsetY;
-            canvas.style.cursor = 'grabbing';
+            canvas.setPointerCapture(e.pointerId);
+            pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            if (pointers.size >= 2) {
+                const [p1, p2] = [...pointers.values()];
+                const [mx, my] = localXY((p1.x + p2.x) / 2, (p1.y + p2.y) / 2);
+                pinch = {
+                    dist:    Math.hypot(p2.x - p1.x, p2.y - p1.y),
+                    midX:    mx, midY: my,
+                    scale:   this.scale,
+                    offsetX: this.offsetX, offsetY: this.offsetY,
+                };
+                drag = null;
+                canvas.style.cursor = 'grab';
+            } else {
+                drag = {
+                    startX: e.clientX, startY: e.clientY,
+                    originX: this.offsetX, originY: this.offsetY,
+                    pointerId: e.pointerId,
+                };
+                canvas.style.cursor = 'grabbing';
+            }
         });
 
-        canvas.addEventListener('mousemove', e => {
-            if (this._dragging) {
-                this.offsetX = this._dragOriginX + (e.clientX - this._dragStartX);
-                this.offsetY = this._dragOriginY + (e.clientY - this._dragStartY);
+        canvas.addEventListener('pointermove', e => {
+            if (pointers.has(e.pointerId)) {
+                pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            }
+
+            if (pinch && pointers.size >= 2) {
+                const [p1, p2] = [...pointers.values()];
+                const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                if (pinch.dist > 0) {
+                    const factor   = dist / pinch.dist;
+                    const newScale = Math.min(3.0, Math.max(0.2, pinch.scale * factor));
+                    const ratio    = newScale / pinch.scale;
+                    this.offsetX = pinch.midX - (pinch.midX - pinch.offsetX) * ratio;
+                    this.offsetY = pinch.midY - (pinch.midY - pinch.offsetY) * ratio;
+                    this.scale   = newScale;
+                    this.draw();
+                }
+            } else if (drag && pointers.size === 1 && pointers.has(drag.pointerId)) {
+                this.offsetX = drag.originX + (e.clientX - drag.startX);
+                this.offsetY = drag.originY + (e.clientY - drag.startY);
                 this.draw();
             }
-            if (this.onHover) {
-                const rect = canvas.getBoundingClientRect();
-                this.onHover(this.hexAtScreen(e.clientX - rect.left, e.clientY - rect.top), e);
+
+            if (this.onHover && pointers.size <= 1) {
+                const [lx, ly] = localXY(e.clientX, e.clientY);
+                this.onHover(this.hexAtScreen(lx, ly), e);
             }
         });
 
-        canvas.addEventListener('mouseup', e => {
-            const dx = e.clientX - this._mouseDownX;
-            const dy = e.clientY - this._mouseDownY;
-            if (Math.hypot(dx, dy) < 5 && this.onClick) {
-                const rect = canvas.getBoundingClientRect();
-                this.onClick(this.hexAtScreen(e.clientX - rect.left, e.clientY - rect.top), e);
-            }
-            this._dragging = false;
-            canvas.style.cursor = 'grab';
-        });
+        const endPointer = e => {
+            const wasDrag  = drag && drag.pointerId === e.pointerId;
+            const wasPinch = !!pinch;
+            pointers.delete(e.pointerId);
 
-        canvas.addEventListener('mouseleave', () => {
-            this._dragging = false;
-            canvas.style.cursor = 'grab';
+            if (wasPinch) {
+                if (pointers.size < 2) pinch = null;
+                if (pointers.size === 0) drag = null;
+                canvas.style.cursor = 'grab';
+            } else if (wasDrag) {
+                const dx = e.clientX - drag.startX;
+                const dy = e.clientY - drag.startY;
+                if (Math.hypot(dx, dy) < 5 && this.onClick) {
+                    const [lx, ly] = localXY(e.clientX, e.clientY);
+                    const tile = this.hexAtScreen(lx, ly);
+                    if (e.pointerType === 'touch' && this.onHover) {
+                        this.onHover(tile, e);
+                    }
+                    this.onClick(tile, e);
+                }
+                drag = null;
+                canvas.style.cursor = 'grab';
+            }
+        };
+
+        canvas.addEventListener('pointerup',     endPointer);
+        canvas.addEventListener('pointercancel', endPointer);
+
+        canvas.addEventListener('pointerleave', () => {
             if (this.onHover) this.onHover(null, null);
         });
 
         canvas.addEventListener('wheel', e => {
             e.preventDefault();
-            const rect        = canvas.getBoundingClientRect();
-            const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-            const factor      = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-            const newScale    = Math.min(3.0, Math.max(0.2, this.scale * factor));
+            const [mx, my] = localXY(e.clientX, e.clientY);
+            const factor   = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+            const newScale = Math.min(3.0, Math.max(0.2, this.scale * factor));
             this.offsetX = mx - (mx - this.offsetX) * (newScale / this.scale);
             this.offsetY = my - (my - this.offsetY) * (newScale / this.scale);
             this.scale   = newScale;
