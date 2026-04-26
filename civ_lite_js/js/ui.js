@@ -963,6 +963,13 @@ document.getElementById('stats-btn').addEventListener('click', () => {
     else closeStats();
 });
 
+document.getElementById('stats-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeStats();
+});
+document.getElementById('tech-overlay').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeTechTree();
+});
+
 document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT') return;
 
