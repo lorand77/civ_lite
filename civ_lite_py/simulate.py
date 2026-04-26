@@ -10,7 +10,7 @@ NUM_PLAYERS = 4
 # ── difficulty config ──────────────────────────────────────────────────────────
 # DIFFICULTY_DEFS is imported from game.py — edit values there.
 # Set a difficulty per player (indices 0-3: Rome, Greece, Huns, Babylon)
-PLAYER_DIFFICULTIES = ["king", "prince", "prince", "prince"]
+PLAYER_DIFFICULTIES = ["prince", "prince", "prince", "prince"]
 
 results = []
 
@@ -21,7 +21,7 @@ for i in range(NUM_GAMES):
 
     while game.winner is None and game.turn < MAX_TURNS:
         civ = game.current_civ()
-        (ai_d_take_turn if civ.player_index >= 2 else ai_e_take_turn)(game, civ)
+        (ai_d_take_turn if civ.player_index >= 20 else ai_e_take_turn)(game, civ)
         game.end_turn()
 
     results.append({"game": i + 1, "winner": game.winner, "turns": game.turn})
