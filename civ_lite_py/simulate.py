@@ -3,7 +3,7 @@ from civ_game.game import Game, PLAYER_NAMES, DIFFICULTY_DEFS
 from civ_game.systems.ai_d import ai_take_turn as ai_d_take_turn  # AI D: players 2, 3 (Huns, Babylon)
 from civ_game.systems.ai_e import ai_take_turn as ai_e_take_turn  # AI E: players 0, 1 (Rome, Greece)
 
-NUM_GAMES   = 100
+NUM_GAMES   = 1000
 MAX_TURNS   = 2000  # safety cap — prevents infinite loops on rare stalemates
 NUM_PLAYERS = 4
 
