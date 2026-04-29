@@ -874,4 +874,7 @@ class Game {
     }
 }
 
-if (typeof module !== 'undefined') module.exports = { Game, computeCityYields, processProduction, availableTechs, canResearch, computeScore, calcDamage, effectiveStrength, cityCombatStrength, meleeAttack, rangedAttack, bombardCity, getItemCost, CITY_NAMES, PLAYER_NAMES, PLAYER_COLORS, DIFFICULTY_DEFS, MAP_COLS, MAP_ROWS };
+if (typeof module !== 'undefined') module.exports = { Game, computeCityYields, processProduction,
+     availableTechs, canResearch, computeScore, calcDamage,
+     effectiveStrength, cityCombatStrength, meleeAttack, rangedAttack, bombardCity, getItemCost,
+      CITY_NAMES, PLAYER_NAMES, PLAYER_COLORS, DIFFICULTY_DEFS, MAP_COLS, MAP_ROWS };
