@@ -316,6 +316,15 @@ function openSetup() {
     document.getElementById('seed-input').value = seed;
     document.getElementById('setup-overlay').classList.remove('hidden');
     _renderSetupRows();
+    _refreshContinueButton();
+}
+
+function _refreshContinueButton() {
+    const btn  = document.getElementById('setup-continue');
+    const meta = quicksaveMetadata();
+    if (!meta) { btn.classList.add('hidden'); return; }
+    btn.classList.remove('hidden');
+    btn.textContent = `Continue (Turn ${meta.turn}, ${meta.civName})`;
 }
 
 function _renderSetupRows() {
@@ -367,13 +376,40 @@ document.getElementById('setup-start').addEventListener('click', () => {
     initGame(seed, [..._setupState.isCpu], [..._setupState.difficulty]);
 });
 
+document.getElementById('setup-continue').addEventListener('click', () => {
+    const saveObj = loadQuick();
+    if (!saveObj) { _refreshContinueButton(); return; }
+    try { applyLoadedState(saveObj); }
+    catch (err) {
+        alert(`Failed to load quicksave: ${err.message}`);
+        _refreshContinueButton();
+    }
+});
+
+document.getElementById('setup-import').addEventListener('click', async () => {
+    try {
+        const saveObj = await importFromFile();
+        applyLoadedState(saveObj);
+    } catch (err) {
+        if (err && err.message !== 'No file chosen')
+            alert(`Failed to import save: ${err.message}`);
+    }
+});
+
 // ============================================================
 // Init / New Game
 // ============================================================
 
+let _activeSetup = null; // {seed, cpuFlags, difficultyFlags} of the running game
+
 function initGame(seed, cpuFlags = null, difficultyFlags = null) {
     scoreHistory = [];
     _victoryShown = false;
+    _activeSetup = {
+        seed,
+        cpuFlags: cpuFlags ?? [false, true, true, true],
+        difficultyFlags: difficultyFlags ?? ['prince','prince','prince','prince'],
+    };
     game = new Game({ seed, cpuFlags, difficultyFlags });
     if (!_rendererReady) {
         renderer = new HexRenderer(canvas, PLAYER_COLORS);
@@ -390,6 +426,35 @@ function initGame(seed, cpuFlags = null, difficultyFlags = null) {
     // If turn 1 starts on a CPU civ, run their AI and chain through any
     // further CPU civs until we land on the first human (or game end).
     if (game.currentCiv().isCpu) doEndTurn();
+}
+
+function applyLoadedState(saveObj) {
+    const loaded = deserializeInto(saveObj);
+    game           = loaded.game;
+    scoreHistory   = loaded.scoreHistory;
+    _activeSetup   = {
+        seed: loaded.setup.seed,
+        cpuFlags: [...loaded.setup.cpuFlags],
+        difficultyFlags: [...loaded.setup.difficultyFlags],
+    };
+    _victoryShown  = false;
+    _setupState.isCpu      = [..._activeSetup.cpuFlags];
+    _setupState.difficulty = [..._activeSetup.difficultyFlags];
+
+    if (!_rendererReady) {
+        renderer = new HexRenderer(canvas, PLAYER_COLORS);
+        renderer.onClick = handleClick;
+        renderer.onHover = handleHover;
+        _rendererReady = true;
+    }
+    renderer.loadTiles(game.tiles);
+    renderer.knownTechs = game.currentCiv().techsResearched;
+    deselect();
+    clearMessages();
+    updateSidebar();
+    renderer.draw();
+    document.getElementById('setup-overlay').classList.add('hidden');
+    if (game.winner !== null) showVictoryScreen(game.winner);
 }
 
 // Show setup screen on page load
@@ -988,6 +1053,17 @@ document.getElementById('stats-btn').addEventListener('click', () => {
     const so = document.getElementById('stats-overlay');
     if (so.classList.contains('hidden')) openStats();
     else closeStats();
+});
+
+document.getElementById('save-btn').addEventListener('click', () => {
+    if (!game || !_activeSetup) return;
+    const meta = saveQuick(game, scoreHistory, _activeSetup);
+    showMessage(`Saved at turn ${meta.turn} (${meta.civName}).`);
+});
+
+document.getElementById('export-btn').addEventListener('click', () => {
+    if (!game || !_activeSetup) return;
+    exportToFile(game, scoreHistory, _activeSetup);
 });
 
 document.getElementById('stats-overlay').addEventListener('click', e => {

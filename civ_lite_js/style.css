@@ -280,12 +280,34 @@ button.danger {
     width: 80px; background: rgba(0,0,0,0.4); border: 1px solid #333;
     border-radius: 3px; color: #eee; font-size: 12px; padding: 3px 6px;
 }
+#setup-buttons { display: flex; flex-direction: column; gap: 6px; margin-top: 18px; }
 #setup-start {
-    display: block; width: 100%; margin-top: 18px; padding: 12px;
+    display: block; width: 100%; padding: 12px;
     font-size: 16px; font-weight: 700; background: #2a6a2a;
     border: 2px solid #50a050; border-radius: 5px; color: #fff; cursor: pointer;
 }
 #setup-start:hover { background: #3a8a3a; }
+#setup-continue {
+    display: block; width: 100%; padding: 10px;
+    font-size: 14px; font-weight: 700; background: #2a4a78;
+    border: 2px solid #5080d0; border-radius: 5px; color: #fff; cursor: pointer;
+}
+#setup-continue:hover { background: #3a5a90; }
+#setup-import {
+    display: block; width: 100%; padding: 8px;
+    font-size: 12px; background: rgba(0,0,0,0.3);
+    border: 1px solid #444; border-radius: 4px; color: #ccc; cursor: pointer;
+}
+#setup-import:hover { background: rgba(0,0,0,0.5); }
+
+/* Save / Export row in the bottom sidebar panel */
+.save-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.save-row button {
+    flex: 1; padding: 6px 8px; font-size: 12px;
+    background: rgba(0,0,0,0.3); border: 1px solid #444;
+    border-radius: 3px; color: #ccc; cursor: pointer;
+}
+.save-row button:hover { background: rgba(0,0,0,0.5); }
 
 /* Tech tree overlay */
 #tech-overlay {
