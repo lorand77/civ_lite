@@ -386,6 +386,10 @@ function initGame(seed, cpuFlags = null, difficultyFlags = null) {
     deselect();
     updateSidebar();
     renderer.draw();
+
+    // If turn 1 starts on a CPU civ, run their AI and chain through any
+    // further CPU civs until we land on the first human (or game end).
+    if (game.currentCiv().isCpu) doEndTurn();
 }
 
 // Show setup screen on page load
