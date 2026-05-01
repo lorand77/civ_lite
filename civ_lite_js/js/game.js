@@ -593,7 +593,13 @@ class Game {
         attacker.q = city.q; attacker.r = city.r; attacker.movesLeft = 0;
 
         const cityTile = this.tiles.get(`${city.q},${city.r}`);
-        if (cityTile) { cityTile.unit = attacker; cityTile.owner = newOwnerIdx; }
+        if (cityTile) {
+            if (cityTile.civilian && cityTile.civilian.owner === oldOwnerIdx) {
+                this.removeUnit(cityTile.civilian);
+            }
+            cityTile.unit = attacker;
+            cityTile.owner = newOwnerIdx;
+        }
 
         const oldCiv = this.civs[oldOwnerIdx];
         const newCiv = this.civs[newOwnerIdx];
